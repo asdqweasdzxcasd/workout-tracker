@@ -1,0 +1,36 @@
+# =====================================================
+# 통합 테스트 프로필 (H2 in-memory, PostgreSQL 호환 모드)
+# 출처: docs/design.md - Day 3 통합 테스트 H2 권장
+#
+# 결정: Flyway 비활성 + JPA create-drop
+#   - V1__init.sql 의 PostgreSQL 전용 문법(BIGSERIAL, TIMESTAMPTZ, 부분 인덱스,
+#     LOWER(...) 함수 인덱스) 을 H2 가 100% 호환하지 못함.
+#   - 1주 MVP 일정 보호를 위해 JPA 가 엔티티 매핑에서 자동 DDL 을 생성하도록 위임.
+#   - 단위 테스트는 그대로 두고, 통합 테스트는 시나리오/트랜잭션 검증에 집중.
+# =====================================================
+spring:
+  datasource:
+    url: jdbc:h2:mem:workout-test;MODE=PostgreSQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE;CASE_INSENSITIVE_IDENTIFIERS=TRUE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  flyway:
+    enabled: false
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+        format_sql: true
+    show-sql: true
+
+jwt:
+  secret: dummy-test-secret-at-least-32-characters-long-for-hs256-algorithm-OK
+  expires-in-seconds: 3600
+
+logging:
+  level:
+    org.hibernate.SQL: DEBUG
