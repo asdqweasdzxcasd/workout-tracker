@@ -59,8 +59,11 @@ dependencies {
 
 tasks.named('test') {
     useJUnitPlatform()
+    // 테스트도 동일 타임존 적용 (UTC 기본 회피, @PastOrPresent 등 시간 검증 Flaky 방지)
+    systemProperty 'user.timezone', 'Asia/Seoul'
 }
 
 bootRun {
-    jvmArgs = ['-Xmx512m', '-XX:MaxMetaspaceSize=128m']
+    // JVM 메모리 제한 (EC2 t3.small 환경 보호) + 타임존 KST 고정
+    jvmArgs = ['-Xmx512m', '-XX:MaxMetaspaceSize=128m', '-Duser.timezone=Asia/Seoul']
 }

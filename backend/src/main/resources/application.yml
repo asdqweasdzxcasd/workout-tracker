@@ -18,9 +18,16 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
         format_sql: true
+        jdbc:
+          # JDBC 드라이버에 KST 명시 (TIMESTAMPTZ <-> OffsetDateTime 변환 기준)
+          time_zone: Asia/Seoul
     hibernate:
       # Flyway가 스키마를 관리하므로 Hibernate는 절대 DDL을 만지지 않음
       ddl-auto: validate
+
+  # Jackson JSON 직렬화 timezone (응답에 표시되는 시간을 KST 로 통일)
+  jackson:
+    time-zone: Asia/Seoul
 
   # Flyway 마이그레이션 (부트 시 자동 실행)
   flyway:
