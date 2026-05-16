@@ -17,6 +17,7 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.BatchSize;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -67,8 +68,15 @@ public class SessionExercise {
     @Column(name = "order_no", nullable = false)
     private Integer orderNo;
 
+    /**
+     * 세션 내 세트 목록. fetch=LAZY + @BatchSize 로 상세 조회 시 N+1 회피.
+     *
+     * <p>WorkoutSessionRepository.findDetailByIdAndUserId 가 exercises 만 fetch join 하므로,
+     * 다음 단계 sets 접근 시 BatchSize 만큼 IN 절로 한 번에 로딩 (MultipleBagFetchException 회피).
+     */
     @OneToMany(mappedBy = "sessionExercise", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("setNo ASC")
+    @BatchSize(size = 50)
     private final List<ExerciseSet> sets = new ArrayList<>();
 
     @Builder

@@ -18,11 +18,11 @@ public interface WorkoutSessionRepository extends JpaRepository<WorkoutSession, 
     Optional<WorkoutSession> findByIdAndUserId(Long id, Long userId);
 
     /**
-     * 상세 조회용 - exercises + sets 까지 fetch join 으로 1쿼리에 로딩 (N+1 회피).
+     * 상세 조회용 - exercises 만 fetch join + sets 는 @BatchSize(50) 로 N+1 회피.
      *
-     * <p>JOIN FETCH 두 단계 컬렉션은 MultipleBagFetchException 우려가 있으나,
-     * exercises 와 sets 는 다른 컬렉션 트리이므로 hibernate 6+ 에서 동작.
-     * 문제가 발생할 경우 sets 는 별도 batch fetch / @BatchSize 로 변경 검토.
+     * <p>2단계 컬렉션 동시 fetch join 은 MultipleBagFetchException 을 일으키므로
+     * SessionExercise.sets 에 @BatchSize 를 두어 IN 절 한 번으로 일괄 로딩하는 방식 채택.
+     * (Hibernate 모범 사례)
      *
      * <p>중복 row 제거를 위해 {@code SELECT DISTINCT} 사용.
      */
@@ -30,7 +30,6 @@ public interface WorkoutSessionRepository extends JpaRepository<WorkoutSession, 
             SELECT DISTINCT s
             FROM WorkoutSession s
             LEFT JOIN FETCH s.exercises se
-            LEFT JOIN FETCH se.sets
             WHERE s.id = :id AND s.userId = :userId
             """)
     Optional<WorkoutSession> findDetailByIdAndUserId(
