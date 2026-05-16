@@ -53,3 +53,7 @@ dependencies {
 tasks.named('test') {
     useJUnitPlatform()
 }
+
+bootRun {
+    jvmArgs = ['-Xmx512m', '-XX:MaxMetaspaceSize=128m']
+}
