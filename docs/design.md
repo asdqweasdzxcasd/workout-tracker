@@ -1,0 +1,976 @@
+# workout-tracker MVP 설계 문서
+
+> 작성일: 2026-05-16  
+> 작성자: @architect  
+> 목적:    충족을 위한 풀스택 MVP 프로젝트 설계  
+> 범위: 1주 (40시간) 내 완성, 면접 시연용
+
+---
+
+## 0. 요약 (TL;DR)
+
+- 도메인: 운동 세션/세트 기록 + 인증샷 업로드 -> 웰니스/피트니스 도메인 매칭
+- 아키텍처: Browser -> Vercel(Next.js, BFF) -> EC2(Spring Boot in Docker) -> RDS(PostgreSQL), 이미지는 S3 presigned URL
+- BFF 패턴: Vercel의 Next.js API Route가 EC2로 서버사이드 프록시 (Mixed Content 회피 + EC2 IP 은닉)
+- 핵심 트레이드오프:
+  - 단순함 우선: 모놀리식 Spring Boot 1개 + Next.js 1개. MSA/큐/캐시는 모두 제외
+  - 데이터 정합성 우선: 세션-세트 저장은 단일 트랜잭션, 동시성 충돌이 거의 없는 1인 사용 도메인이므로 락은 최소화
+  - 학습효과 우선: React Query/Playwright/Next.js BFF/S3 presigned URL 등 주요 기술를 실제 코드로 시연 가능하게 설계
+  - 도메인 미구매 결정에 따라 Vercel 기본 도메인 + EC2 IP 직접 접근, HTTPS는 BFF로 해결
+
+---
+
+## 1. 기능 우선순위 매트릭스
+
+### 1.1 MoSCoW 분류
+
+| 우선순위 | 기능 | 예상 시간 | 비고 |
+|---|---|---|---|
+| Must | 회원가입/로그인 (JWT 발급/검증) | 4h | Spring Security + BCrypt |
+| Must | 운동 종류 라이브러리 조회 (시드 데이터) | 1.5h | 읽기 전용, 캐시 가능 |
+| Must | 운동 세션 + 세트 기록 (생성/조회/삭제) | 6h | 단일 트랜잭션 핵심 기능 |
+| Must | 운동 기록 목록 페이징 조회 | 2h | 날짜 역순, Slice 기반 |
+| Must | Next.js 페이지 + React Query 통합 | 6h | 인증/세션 폼/리스트 |
+| Must | EC2 Docker 배포 + Vercel 배포 + RDS 연결 | 4h | docker-compose, GitHub Actions |
+| Should | 운동별 PR(최고 무게) / 최근 기록 | 2h | 집계 쿼리 |
+| Should | 인증샷 S3 presigned URL 업로드 | 3h | PUT presigned, 메타데이터만 DB |
+| Should | Playwright E2E (로그인 -> 기록 -> 조회) | 3h | 시나리오 2~3개 |
+| Should | Swagger/OpenAPI 문서 자동화 | 1h | springdoc-openapi |
+| Could | 주간 통계 (총 볼륨 = 무게x횟수 합계) | 2h | 시간 남으면 |
+| Could | 소셜 로그인 (Google OAuth) | 4h | 제외 권장 |
+| Could | 이미지 썸네일 (Lambda) | - | 제외 |
+
+합계 (Must+Should): 약 32.5h / 40h -> 7.5h 버퍼 확보
+
+### 1.3 JD "AI 활용 능력" 처리 방침
+
+요구사항 4번째 "AI를 활용한 업무 효율화 능력"은 코드에 AI 기능을 넣지 않고 **개발 과정의 AI 도구 활용**으로 어필. 이유:
+- AI 기능을 위해 OpenAI API 호출 등을 추가하면 4h+ 일정 추가 + 비용 발생
+- 일반적 의미는 보통 "사내 업무에 AI를 활용해 생산성 올리기" -> 면접 답변으로 충분
+- 면접 답변 카드: "1주 안에 풀스택 완성한 핵심 비결은 Claude Code/Copilot 등 AI 도구로 부족 기술(Next.js, Playwright, React Query) 빠르게 학습하면서 트레이드오프 검토는 직접 수행한 것"
+
+### 1.2 의도적으로 제외한 것
+
+- 운동 종류 사용자 추가 기능 (시드만 사용)
+- 비밀번호 재설정/이메일 인증 (메일 인프라 부담)
+- 관리자 페이지
+- 다국어
+- 다크모드
+
+> 이유: MVP는 "주요 기술를 실제 코드로 보여주는 것"이 목적. 깊이가 없는 기능 추가보다 핵심 흐름의 완성도가 면접에서 효과적임.
+
+---
+
+## 2. DB 스키마
+
+### 2.1 ER 다이어그램 (Mermaid)
+
+```mermaid
+erDiagram
+    USERS ||--o{ WORKOUT_SESSIONS : has
+    USERS ||--o{ SESSION_PHOTOS : owns
+    WORKOUT_SESSIONS ||--o{ SESSION_EXERCISES : contains
+    SESSION_EXERCISES ||--o{ EXERCISE_SETS : contains
+    EXERCISES ||--o{ SESSION_EXERCISES : referenced_by
+    WORKOUT_SESSIONS ||--o{ SESSION_PHOTOS : has
+
+    USERS {
+        bigint id PK
+        varchar email UK
+        varchar password_hash
+        varchar nickname
+        timestamptz created_at
+        timestamptz updated_at
+    }
+    EXERCISES {
+        bigint id PK
+        varchar code UK
+        varchar name_ko
+        varchar name_en
+        varchar body_part
+        varchar category
+        boolean is_active
+    }
+    WORKOUT_SESSIONS {
+        bigint id PK
+        bigint user_id FK
+        date performed_on
+        varchar memo
+        timestamptz created_at
+    }
+    SESSION_EXERCISES {
+        bigint id PK
+        bigint session_id FK
+        bigint exercise_id FK
+        int order_no
+    }
+    EXERCISE_SETS {
+        bigint id PK
+        bigint session_exercise_id FK
+        int set_no
+        numeric weight_kg
+        int reps
+    }
+    SESSION_PHOTOS {
+        bigint id PK
+        bigint session_id FK
+        bigint user_id FK
+        varchar s3_key
+        varchar content_type
+        bigint size_bytes
+        timestamptz uploaded_at
+    }
+```
+
+### 2.2 DDL (PostgreSQL 16)
+
+```sql
+-- =========================================
+-- users
+-- =========================================
+CREATE TABLE users (
+    id              BIGSERIAL PRIMARY KEY,
+    email           VARCHAR(255) NOT NULL UNIQUE,
+    password_hash   VARCHAR(100) NOT NULL,
+    nickname        VARCHAR(50)  NOT NULL,
+    created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_users_email ON users (LOWER(email));
+
+-- =========================================
+-- exercises (마스터 데이터)
+-- =========================================
+CREATE TABLE exercises (
+    id          BIGSERIAL PRIMARY KEY,
+    code        VARCHAR(50)  NOT NULL UNIQUE,
+    name_ko     VARCHAR(50)  NOT NULL,
+    name_en     VARCHAR(80)  NOT NULL,
+    body_part   VARCHAR(20)  NOT NULL,
+    category    VARCHAR(20)  NOT NULL,
+    is_active   BOOLEAN      NOT NULL DEFAULT TRUE
+);
+CREATE INDEX idx_exercises_body_part ON exercises (body_part) WHERE is_active = TRUE;
+
+-- =========================================
+-- workout_sessions
+-- =========================================
+CREATE TABLE workout_sessions (
+    id              BIGSERIAL PRIMARY KEY,
+    user_id         BIGINT      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    performed_on    DATE        NOT NULL,
+    memo            VARCHAR(500),
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_sessions_user_date ON workout_sessions (user_id, performed_on DESC, id DESC);
+
+-- =========================================
+-- session_exercises
+-- =========================================
+CREATE TABLE session_exercises (
+    id          BIGSERIAL PRIMARY KEY,
+    session_id  BIGINT NOT NULL REFERENCES workout_sessions(id) ON DELETE CASCADE,
+    exercise_id BIGINT NOT NULL REFERENCES exercises(id),
+    order_no    INT    NOT NULL,
+    UNIQUE (session_id, order_no)
+);
+CREATE INDEX idx_session_exercises_session ON session_exercises (session_id);
+CREATE INDEX idx_session_exercises_exercise ON session_exercises (exercise_id);
+
+-- =========================================
+-- exercise_sets
+-- =========================================
+CREATE TABLE exercise_sets (
+    id                   BIGSERIAL PRIMARY KEY,
+    session_exercise_id  BIGINT  NOT NULL REFERENCES session_exercises(id) ON DELETE CASCADE,
+    set_no               INT     NOT NULL,
+    weight_kg            NUMERIC(6, 2) NOT NULL CHECK (weight_kg >= 0),
+    reps                 INT     NOT NULL CHECK (reps > 0),
+    UNIQUE (session_exercise_id, set_no)
+);
+CREATE INDEX idx_exercise_sets_weight ON exercise_sets (session_exercise_id, weight_kg DESC);
+
+-- =========================================
+-- session_photos
+-- =========================================
+CREATE TABLE session_photos (
+    id            BIGSERIAL PRIMARY KEY,
+    session_id    BIGINT      NOT NULL REFERENCES workout_sessions(id) ON DELETE CASCADE,
+    user_id       BIGINT      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    s3_key        VARCHAR(300) NOT NULL,
+    content_type  VARCHAR(50)  NOT NULL,
+    size_bytes    BIGINT       NOT NULL CHECK (size_bytes > 0 AND size_bytes <= 10485760),
+    uploaded_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+CREATE INDEX idx_photos_session ON session_photos (session_id);
+```
+
+### 2.3 인덱스 전략 요약
+
+| 인덱스 | 목적 | 비고 |
+|---|---|---|
+| idx_sessions_user_date | 메인 리스트 페이징의 핵심 | (user_id, performed_on DESC, id DESC) 복합. id를 tiebreaker로 - 키셋 페이징 가능 |
+| idx_session_exercises_exercise | PR/히스토리 집계 | exercise 단위 조회 |
+| idx_exercise_sets_weight | PR 1쿼리 추출 | MAX(weight_kg) 빠르게 |
+| LOWER(email) 인덱스 | 대소문자 무관 로그인 | 함수 인덱스 |
+
+### 2.4 트랜잭션 경계
+
+| 작업 | 트랜잭션 범위 | 이유 |
+|---|---|---|
+| 회원가입 | 단일 INSERT | 단순 |
+| 세션 생성 | session -> session_exercises -> exercise_sets 모두 한 트랜잭션 | 부분 저장 시 데이터 정합성 깨짐 |
+| 세션 삭제 | CASCADE로 자동 | DB 레벨 보장 |
+| 인증샷 업로드 | 메타데이터 INSERT만 트랜잭션, S3 PUT은 클라이언트에서 직접 | presigned URL 방식이므로 분리 |
+
+### 2.5 동시성 / 락 전략
+
+- 기본 전략: 1인 사용자가 자기 데이터만 다루는 도메인 -> 락 거의 불필요
+- PR 조회: 읽기 일관성만 필요 -> 락 없음, READ COMMITTED 기본값
+- 세션 생성 중 동일 user_id가 동시 요청: 거의 발생 안 함. 발생해도 별개 세션이라 무방
+- 명시적 락이 필요한 가상 시나리오 (확장 포인트로만 언급): 추후 친구/그룹 기능 추가 시 그룹 멤버십 검사에 비관적 락 고려
+
+### 2.6 시드 데이터 (운동 종류 12개)
+
+```sql
+INSERT INTO exercises (code, name_ko, name_en, body_part, category) VALUES
+('BENCH_PRESS',     '벤치프레스',       'Bench Press',          'CHEST',    'COMPOUND'),
+('INCLINE_DB_PRESS','인클라인 덤벨프레스','Incline Dumbbell Press','CHEST',   'COMPOUND'),
+('DEADLIFT',        '데드리프트',       'Deadlift',             'BACK',     'COMPOUND'),
+('LAT_PULLDOWN',    '랫풀다운',         'Lat Pulldown',         'BACK',     'COMPOUND'),
+('BARBELL_ROW',     '바벨로우',         'Barbell Row',          'BACK',     'COMPOUND'),
+('SQUAT',           '바벨 스쿼트',      'Barbell Squat',        'LEG',      'COMPOUND'),
+('LEG_PRESS',       '레그프레스',       'Leg Press',            'LEG',      'COMPOUND'),
+('OHP',             '오버헤드프레스',   'Overhead Press',       'SHOULDER', 'COMPOUND'),
+('LATERAL_RAISE',   '사이드 레터럴',    'Lateral Raise',        'SHOULDER', 'ISOLATION'),
+('BB_CURL',         '바벨컬',           'Barbell Curl',         'ARM',      'ISOLATION'),
+('TRICEPS_PUSHDOWN','트라이셉스 푸시다운','Triceps Pushdown',    'ARM',      'ISOLATION'),
+('PLANK',           '플랭크',           'Plank',                'CORE',     'ISOLATION');
+```
+
+> Flyway 또는 Spring Boot data.sql로 부트 시 자동 적재. ON CONFLICT DO NOTHING으로 멱등성 보장.
+
+---
+
+## 3. REST API 설계
+
+### 3.1 공통 규약
+
+- Base URL: `https://api.workout-tracker.example.com/api/v1`
+- Content-Type: `application/json; charset=utf-8`
+- 인증: `Authorization: Bearer <JWT>`
+- 시간 포맷: ISO-8601 (`2026-05-16T10:30:00Z`)
+- 페이징: 쿼리스트링 `?page=0&size=20` (Spring Pageable 표준), 응답은 `{ content, page, size, totalElements, hasNext }`
+
+### 3.2 표준 에러 응답
+
+```json
+{
+  "timestamp": "2026-05-16T10:30:00Z",
+  "status": 400,
+  "code": "VALIDATION_FAILED",
+  "message": "weight_kg must be >= 0",
+  "path": "/api/v1/sessions",
+  "traceId": "abc123"
+}
+```
+
+### 3.3 상태 코드 규칙
+
+| 상태 | 사용처 |
+|---|---|
+| 200 | 조회/수정 성공 |
+| 201 | 생성 성공 (Location 헤더 포함) |
+| 204 | 삭제 성공 |
+| 400 | 검증 실패 (Bean Validation) |
+| 401 | 토큰 없음/만료/위변조 |
+| 403 | 권한 없음 (남의 리소스 접근) |
+| 404 | 리소스 없음 |
+| 409 | 이메일 중복 등 비즈니스 충돌 |
+| 500 | 서버 에러 |
+
+### 3.4 엔드포인트 목록
+
+| Method | Path | 인증 | 설명 |
+|---|---|---|---|
+| POST | /auth/signup | No | 회원가입 |
+| POST | /auth/login | No | 로그인 (JWT 발급) |
+| GET | /auth/me | Yes | 내 정보 |
+| GET | /exercises | Yes | 운동 종류 목록 (body_part 필터) |
+| POST | /sessions | Yes | 세션 + 세트 일괄 생성 |
+| GET | /sessions | Yes | 내 세션 목록 (페이징) |
+| GET | /sessions/{id} | Yes | 세션 상세 |
+| DELETE | /sessions/{id} | Yes | 세션 삭제 |
+| GET | /exercises/{id}/stats | Yes | 운동별 PR/최근 기록 |
+| POST | /photos/presign | Yes | S3 PUT presigned URL 발급 |
+| POST | /sessions/{id}/photos | Yes | 업로드 완료 후 메타데이터 등록 |
+
+### 3.5 주요 엔드포인트 상세
+
+#### POST /auth/signup
+```json
+// Request
+{ "email": "kim@example.com", "password": "Secret1234!", "nickname": "kim" }
+// Response 201
+{ "userId": 1, "email": "kim@example.com", "nickname": "kim" }
+```
+- 검증: 이메일 형식, 비밀번호 8자+영문+숫자, 닉네임 2~20자
+- 충돌: 이메일 중복 시 409 EMAIL_DUPLICATED
+
+#### POST /auth/login
+```json
+// Request
+{ "email": "kim@example.com", "password": "Secret1234!" }
+// Response 200
+{ "accessToken": "eyJ...", "tokenType": "Bearer", "expiresIn": 3600 }
+```
+
+#### POST /sessions (핵심: 단일 트랜잭션)
+```json
+// Request
+{
+  "performedOn": "2026-05-16",
+  "memo": "가슴/삼두",
+  "exercises": [
+    {
+      "exerciseId": 1,
+      "orderNo": 1,
+      "sets": [
+        { "setNo": 1, "weightKg": 60.0, "reps": 10 },
+        { "setNo": 2, "weightKg": 70.0, "reps": 8 }
+      ]
+    }
+  ]
+}
+// Response 201, Location: /api/v1/sessions/123
+{ "sessionId": 123 }
+```
+
+#### GET /sessions?page=0&size=20
+```json
+{
+  "content": [
+    {
+      "id": 123,
+      "performedOn": "2026-05-16",
+      "memo": "가슴/삼두",
+      "exerciseCount": 3,
+      "totalSets": 9,
+      "totalVolume": 4520.0,
+      "photoCount": 1
+    }
+  ],
+  "page": 0, "size": 20, "totalElements": 1, "hasNext": false
+}
+```
+
+#### GET /exercises/{id}/stats
+```json
+{
+  "exerciseId": 1,
+  "name": "벤치프레스",
+  "personalRecordKg": 100.0,
+  "personalRecordDate": "2026-05-10",
+  "recentSessions": [
+    { "sessionId": 123, "performedOn": "2026-05-16", "topSet": { "weightKg": 90.0, "reps": 5 } }
+  ]
+}
+```
+
+#### POST /photos/presign
+```json
+// Request
+{ "contentType": "image/jpeg", "sizeBytes": 524288 }
+// Response 200
+{
+  "uploadUrl": "https://...s3.amazonaws.com/...?X-Amz-Signature=...",
+  "s3Key": "users/1/2026/05/uuid.jpg",
+  "expiresInSec": 300
+}
+```
+- 서버는 S3 키 생성 + presign만 수행. 실제 PUT은 클라이언트가 S3에 직접
+- size 10MB 이내, content-type whitelist 검증
+
+#### POST /sessions/{id}/photos
+업로드 완료 후 클라이언트가 호출 -> DB에 메타데이터 INSERT.  
+HEAD S3 호출로 실제 업로드 검증(선택, MVP에선 생략 가능).
+
+### 3.6 페이징 / 필터 규약
+
+- 페이지 기반: page, size (max 50)
+- 정렬: 기본 performedOn DESC, id DESC (고정, sort 파라미터 미지원으로 단순화)
+- 필터: /exercises?bodyPart=CHEST
+
+---
+
+## 4. Frontend 구조
+
+### 4.1 페이지 라우트 (Next.js 16 App Router)
+
+```
+src/app/
+├── layout.tsx                  # 루트: QueryClientProvider, ToastProvider
+├── page.tsx                    # 랜딩 (로그인 안 됨 -> /login, 됨 -> /sessions)
+├── (auth)/
+│   ├── login/page.tsx
+│   └── signup/page.tsx
+├── (app)/
+│   ├── layout.tsx              # 인증 필요 영역, 사이드바
+│   ├── sessions/
+│   │   ├── page.tsx            # 목록 (React Query infinite or paged)
+│   │   ├── new/page.tsx        # 신규 작성
+│   │   └── [id]/page.tsx       # 상세
+│   ├── exercises/
+│   │   └── [id]/page.tsx       # 운동별 PR/히스토리
+│   └── profile/page.tsx
+├── api/
+│   └── proxy/
+│       └── [...path]/
+│           └── route.ts        # BFF: 모든 /api/proxy/* 를 EC2로 서버사이드 프록시
+└── middleware.ts               # JWT 토큰 존재 여부 검사 (라우트 가드)
+```
+
+### 4.1.1 BFF 프록시 라우트 (핵심)
+
+```typescript
+// src/app/api/proxy/[...path]/route.ts
+// Mixed Content 회피 + EC2 IP 은닉 위한 서버사이드 프록시
+
+const EC2_API_URL = process.env.EC2_API_URL!;  // http://3.34.190.95:8080
+
+async function proxy(request: Request, path: string[]) {
+  const targetUrl = `${EC2_API_URL}/api/v1/${path.join('/')}${
+    request.url.includes('?') ? '?' + request.url.split('?')[1] : ''
+  }`;
+
+  const headers = new Headers(request.headers);
+  headers.delete('host');  // Next.js host -> EC2로 전달 방지
+
+  const response = await fetch(targetUrl, {
+    method: request.method,
+    headers,
+    body: ['GET', 'HEAD'].includes(request.method) ? undefined : await request.text(),
+    cache: 'no-store',
+  });
+
+  return new Response(await response.arrayBuffer(), {
+    status: response.status,
+    headers: response.headers,
+  });
+}
+
+export const GET    = (req: Request, ctx) => proxy(req, ctx.params.path);
+export const POST   = (req: Request, ctx) => proxy(req, ctx.params.path);
+export const PUT    = (req: Request, ctx) => proxy(req, ctx.params.path);
+export const DELETE = (req: Request, ctx) => proxy(req, ctx.params.path);
+```
+
+- 브라우저는 항상 `https://workout-tracker.vercel.app/api/proxy/*` 만 호출
+- Vercel 서버가 `http://3.34.190.95:8080/api/v1/*` 로 전달
+- 브라우저 입장에서는 same-origin HTTPS 호출, EC2 IP는 외부에 노출되지 않음
+- JWT는 클라이언트가 Authorization 헤더로 BFF에 전달, BFF가 그대로 EC2로 forward
+
+### 4.2 주요 컴포넌트 트리
+
+```
+<SessionsPage>
+├── <SessionFilter />
+├── <SessionList>
+│   └── <SessionCard />   # 카드별 운동수/볼륨/사진수
+└── <Pagination />
+
+<SessionNewPage>
+├── <SessionMetaForm />   # 날짜, 메모
+├── <ExercisePicker />    # 운동 종류 검색/선택
+├── <ExerciseSection>     # 운동 1개당
+│   └── <SetRow />        # 세트 1개당 (무게/횟수)
+├── <PhotoUploader />     # presigned URL 흐름 캡슐화
+└── <SubmitBar />
+```
+
+### 4.3 React Query 사용 패턴
+
+#### Query Key 규약
+
+```ts
+// src/lib/queryKeys.ts
+export const qk = {
+  me: ['me'] as const,
+  exercises: (bodyPart?: string) => ['exercises', { bodyPart }] as const,
+  sessions: (page: number) => ['sessions', { page }] as const,
+  session: (id: number) => ['sessions', id] as const,
+  exerciseStats: (id: number) => ['exercises', id, 'stats'] as const,
+};
+```
+
+#### Mutation 전략
+
+| 상황 | 전략 |
+|---|---|
+| 세션 생성 성공 | queryClient.invalidateQueries({ queryKey: ['sessions'] }) |
+| 세션 삭제 | optimistic update - 목록에서 즉시 제거, 실패 시 롤백 |
+| 인증샷 업로드 | 단계별 mutation 체이닝: presign -> S3 PUT (fetch) -> metadata POST |
+| 로그인 성공 | setQueryData(qk.me, user) 즉시 반영 |
+
+#### staleTime 정책
+
+- exercises: 1시간 (사실상 정적)
+- sessions: 30초
+- me: 5분
+
+### 4.4 인증 가드 (middleware.ts) - Bearer 방식 확정
+
+```ts
+// 로직 요약
+// 1) /login, /signup, /api/proxy는 통과 (인증 불필요 또는 BFF가 처리)
+// 2) 그 외 보호 경로는 클라이언트 컴포넌트에서 토큰 확인 후 리다이렉트
+//    (middleware는 localStorage 접근 불가하므로 클라이언트 가드 위주)
+```
+
+- JWT 전달: **Bearer 헤더 방식** (Authorization: Bearer <token>)
+- 클라이언트 저장: localStorage (MVP), 운영은 HttpOnly 쿠키로 마이그레이션 예정
+- ky/axios 인터셉터로 자동 첨부
+- 토큰 만료(401) 시 자동 로그아웃 + 로그인 페이지로 리다이렉트
+
+#### Bearer 방식을 선택한 이유 (MVP 한정)
+
+| 항목 | Bearer + localStorage | HttpOnly 쿠키 |
+|---|---|---|
+| CORS 설정 | 단순 | credentials: include + SameSite 까다로움 |
+| BFF 패턴과 궁합 | 자연스러움 | 가능하지만 추가 설정 |
+| XSS 방어 | 약함 (스크립트 접근 가능) | 강함 |
+| 개발자 익숙도 | 기존 JwtInterceptor 경험과 동일 | 학습 필요 |
+| MVP 1주 일정 | 빠름 | 시간 소요 |
+
+→ MVP에서는 Bearer로 빠르게 완성하고, 면접 답변에서 "운영 시 HttpOnly 쿠키 마이그레이션 계획"으로 보완.
+
+#### 운영 시 마이그레이션 답변 카드
+
+> "현재 Bearer + localStorage는 빠른 MVP 완성을 위한 선택이었고, XSS 위험을 인지하고 있습니다. 운영 배포 시에는 HttpOnly Secure SameSite=Lax 쿠키 + CORS credentials 설정으로 마이그레이션할 계획입니다. 도메인 구조도 같은 eTLD+1로 묶어 SameSite=Lax가 작동하도록 설계할 것입니다."
+
+### 4.5 서버 상태 vs 클라이언트 상태
+
+| 상태 | 도구 | 예시 |
+|---|---|---|
+| 서버 상태 | React Query | 세션 목록, 운동 종류, 내 정보 |
+| 폼 상태 | react-hook-form | 세션 작성 폼 |
+| UI 상태 | useState/zustand(선택) | 사이드바 열림, 모달 |
+| 인증 상태 | 쿠키 + useQuery(qk.me) | 로그인 여부는 me 쿼리로 도출 |
+
+> Redux 도입하지 않음 - MVP 규모에서 오버엔지니어링.
+
+---
+
+## 5. AWS 아키텍처
+
+### 5.1 시스템 다이어그램 (BFF 패턴 반영)
+
+```
+[User Browser]
+     │ HTTPS (always)
+     ▼
+[Vercel ─ Next.js]
+   ├─ 페이지 렌더링 (App Router + RSC)
+   ├─ /api/proxy/* (BFF, 서버사이드 fetch)
+   └─ ENV: EC2_API_URL=http://3.34.190.95:8080
+     │
+     │ HTTP (서버-to-서버, 브라우저 미경유 -> Mixed Content 회피)
+     ▼
+[EC2 (t3.micro) ─ Docker Compose]
+   ├─ nginx (옵션, 80 -> spring-boot:8080 프록시)
+   └─ spring-boot:8080 (REST API)
+     │
+     ▼ JDBC (VPC 내, SG 화이트리스트로 EC2만 허용)
+[RDS PostgreSQL 16 ─ db.t4g.micro]
+
+[Browser] ──(presigned PUT, HTTPS)── [S3 Bucket: workout-tracker-photos]
+                                       └── 버킷 정책: 비공개, presigned로만 GET/PUT
+                                       └── CORS: Vercel 도메인 허용
+```
+
+### 5.1.1 왜 BFF 패턴?
+
+| 문제 | 해결 |
+|---|---|
+| Vercel HTTPS에서 EC2 HTTP 호출 시 Mixed Content 차단 | BFF가 서버사이드로 HTTP 호출, 브라우저는 같은 origin HTTPS만 사용 |
+| EC2 IP 노출 (보안/스캐닝 위험) | BFF가 EC2 IP를 환경변수로만 가짐, 외부 노출 없음 |
+| CORS 설정 복잡도 | Browser-Vercel은 same-origin이라 CORS 불필요. Vercel-EC2는 서버 호출이라 CORS 미적용 |
+| 향후 Rate limiting/Auth 강화 | BFF 레이어에서 일괄 처리 가능 |
+
+### 5.1.2 향후 도메인 구매 시 마이그레이션
+
+- 옵션1: api.workout-tracker.com 으로 EC2에 직접 HTTPS (Let's Encrypt) 적용 후 BFF 제거 가능
+- 옵션2: BFF 유지 + 캐싱/인증 강화 (대기업 표준)
+- 본 MVP는 옵션1로 가는 1단계 구조
+
+### 5.2 컴포넌트 간 통신
+
+| 구간 | 프로토콜 | 인증 |
+|---|---|---|
+| Browser <-> Vercel 페이지 | HTTPS | (없음, 페이지 자체는 공개) |
+| Browser <-> Vercel /api/proxy | HTTPS (same-origin) | Bearer JWT (Authorization 헤더) |
+| Vercel <-> EC2 API | HTTP (서버-to-서버) | Bearer JWT (그대로 forward) |
+| EC2 <-> RDS | TCP 5432 (VPC 내) | DB 사용자/비밀번호 (환경변수, 추후 Secrets Manager) |
+| Browser <-> S3 | HTTPS | presigned URL (5분) |
+| EC2 <-> S3 (presign 발급) | AWS SDK | EC2 IAM Role |
+| Browser <-> S3 (presigned URL 발급 요청) | HTTPS via Vercel BFF | Bearer JWT |
+
+### 5.3 보안 고려사항
+
+#### Security Group
+| SG | Inbound | Outbound |
+|---|---|---|
+| ec2-sg | 22 (내 IP만), 80/443 (0.0.0.0) | All |
+| rds-sg | 5432 (ec2-sg만) | None |
+| s3 | 버킷 정책: BlockPublicAccess ON | - |
+
+#### IAM Role (EC2에 부착)
+- s3:PutObject, s3:GetObject (workout-tracker-photos/* 한정)
+- secretsmanager:GetSecretValue (선택)
+- 절대 root key를 EC2에 두지 않음
+
+#### 비밀 관리
+- DB 비밀번호, JWT secret: EC2 환경변수 (MVP) -> 추후 AWS Secrets Manager 마이그레이션
+- .env는 git ignore, GitHub Actions secrets에서 EC2로 rsync
+
+### 5.4 S3 Presigned URL 워크플로우
+
+```
+[FE] ── POST /photos/presign (contentType, size) ──▶ [BE]
+                                                       │
+                                            (검증: type whitelist, size <= 10MB)
+                                            (S3 key 생성: users/{userId}/{yyyy}/{MM}/{uuid}.ext)
+                                            (AWS SDK presigner.presignPutObject)
+                                                       │
+[FE] ◀────── { uploadUrl, s3Key, expiresInSec: 300 } ─┘
+   │
+   ├── PUT uploadUrl  (Content-Type 헤더 일치 필수) ──▶ [S3]
+   │                                                     │ 200
+   │ ◀───────────────────────────────────────────────────┘
+   │
+   └── POST /sessions/{id}/photos { s3Key, contentType, sizeBytes } ─▶ [BE]
+                                                                       │
+                                                              (선택) HEAD s3Key로 실제 업로드 검증
+                                                              INSERT session_photos
+                                                                       │
+   ◀───────────────────────── 201 { photoId } ─────────────────────────┘
+```
+
+왜 presigned URL?
+- 큰 파일이 백엔드를 거치지 않음 -> EC2 메모리/네트워크 절약
+- t3.micro/t4g.micro 같은 작은 인스턴스에 적합
+- AWS Well-Architected 권장 패턴 -> 면접 어필 포인트
+
+### 5.5 환경별 설정 전략
+
+| 환경 | Frontend | Backend | DB |
+|---|---|---|---|
+| local | npm run dev (localhost:3000) | ./gradlew bootRun | docker-compose postgres |
+| dev (선택) | Vercel Preview | 동일 EC2 다른 포트 | 동일 RDS, schema 분리 |
+| prod | Vercel main | EC2 docker-compose | RDS |
+
+- Spring profile: application-{local,prod}.yml 분리
+- Next.js: .env.local / Vercel Project Settings
+- 절대 운영 비밀이 dev에 들어가지 않도록 분리
+
+---
+
+## 6. 7일 구현 일정
+
+### 가정
+- 하루 5~6시간 작업 기준 (총 ~40h)
+- Day 1 아침 = 오늘부터 카운트
+
+### 일별 계획
+
+#### Day 1 (월) - 인프라/뼈대 (6h)
+- [ ] Spring Boot 프로젝트 생성 (Java 17, Gradle, Spring Web/Security/JPA/Validation/springdoc)
+- [ ] Next.js 16 프로젝트 생성 (TS, Tailwind, App Router, ESLint)
+- [ ] 로컬 docker-compose: postgres 16 + adminer
+- [ ] Flyway 설정 + V1__init.sql (DDL)
+- [ ] application.yml local 프로필
+- 산출물: ./gradlew bootRun 가능, npm run dev 가능, DB 마이그레이션 성공
+- 리스크: Gradle 의존성/플러그인 호환성 -> 30분 안에 안 풀리면 Spring Initializr 그대로 사용
+
+#### Day 2 (화) - 인증 + 운동 종류 (6h) [Day1 의존]
+- [ ] User 엔티티/리포지토리/서비스/컨트롤러
+- [ ] Spring Security + JWT 필터 + BCrypt
+- [ ] 회원가입/로그인 API, /auth/me
+- [ ] Exercise 엔티티 + 시드 SQL (Flyway V2)
+- [ ] /exercises GET 구현
+- 산출물: Postman으로 회원가입 -> 로그인 -> 토큰으로 /auth/me, /exercises 호출 성공
+- 리스크: Spring Security 설정 처음이면 1~2h 추가 가능 -> 공식 가이드 그대로 복사 권장
+
+#### Day 3 (수) - 세션 도메인 (6h) [Day2 의존]
+- [ ] WorkoutSession/SessionExercise/ExerciseSet 엔티티 + 양방향 관계 + cascade
+- [ ] DTO + Bean Validation
+- [ ] POST /sessions 단일 트랜잭션 구현
+- [ ] GET /sessions 페이징 (Slice 또는 Page)
+- [ ] GET /sessions/{id}, DELETE /sessions/{id} + 소유권 검증
+- [ ] 단위 테스트 1~2개 (서비스 레이어)
+- 산출물: 모든 세션 CRUD 동작, Swagger UI에서 확인
+- 리스크: JPA cascade/orphanRemoval 잘못 설정 시 디버깅 길어짐 -> @OneToMany cascade=ALL, orphanRemoval=true로 단순화
+
+#### Day 4 (목) - Frontend 인증 + 목록 + BFF (6h) [Day2,3 의존]
+- [ ] axios/ky 인스턴스 + 인터셉터 (Bearer)
+- [ ] React Query 셋업
+- [ ] **src/app/api/proxy/[...path]/route.ts BFF 프록시 구현**
+- [ ] /login, /signup 페이지 + react-hook-form
+- [ ] middleware.ts 라우트 가드 (또는 클라이언트 가드)
+- [ ] /sessions 목록 페이지 + Pagination
+- [ ] /sessions/new 페이지 (운동 추가, 세트 추가 UX)
+- 산출물: 로그인 -> 세션 작성 -> 목록에 나옴 (모든 API 호출이 /api/proxy 경유 확인)
+- 리스크: 동적 폼 (운동 N개 x 세트 M개) UX. react-hook-form useFieldArray로 시간 절약
+- 리스크2: BFF 라우트가 스트리밍/큰 페이로드 처리 시 메모리 주의 (이미지는 BFF 경유 안 함 -> presigned 직접 PUT)
+
+#### Day 5 (금) - PR/통계 + S3 인증샷 (6h) [Day3,4 의존]
+- [ ] AWS SDK 추가, S3 클라이언트 빈 (IAM Role 기반)
+- [ ] POST /photos/presign 구현 + 검증
+- [ ] POST /sessions/{id}/photos 메타데이터 등록
+- [ ] FE: PhotoUploader 컴포넌트 (presign -> PUT -> metadata)
+- [ ] GET /exercises/{id}/stats (PR 1쿼리)
+- [ ] FE: 운동별 통계 페이지
+- 산출물: 실제 S3 버킷에 이미지 업로드 성공
+- 리스크: CORS 설정 (S3 버킷 CORS, EC2 CORS) -> 사전에 설정 점검
+
+#### Day 6 (토) - AWS 배포 (6h) [Day5 의존]
+- [ ] RDS 생성 (db.t4g.micro, public access OFF, ec2-sg만 허용)
+- [ ] S3 버킷 생성 + 버킷 정책 + CORS
+- [ ] EC2 IAM Role 부착 (S3 권한)
+- [ ] EC2에 docker-compose.yml 배치 (nginx + spring-boot 컨테이너)
+- [ ] Dockerfile (멀티스테이지 빌드)
+- [ ] GitHub Actions: main push -> EC2로 rsync -> docker-compose up -d --build
+- [ ] Vercel: 레포 연결, ENV 설정 (API_BASE_URL)
+- [ ] 도메인/HTTPS (Cloudflare or Let's Encrypt)
+- 산출물: 실제 도메인으로 로그인/세션작성/사진업로드 end-to-end 동작
+- 리스크: 가장 시간 흔들리는 날. CORS, SG, RDS 접속, JVM 메모리(t3.micro 1GB)에서 OOM 가능 -> JAVA_TOOL_OPTIONS=-Xmx512m
+
+#### Day 7 (일) - E2E + 문서화 + 마감 (4h) [Day6 의존]
+- [ ] Playwright 설치 + 시나리오 2개:
+  - signup -> login -> create session -> list 확인
+  - login -> exercise stats 확인
+- [ ] springdoc-openapi-ui 확인, README 작성
+- [ ] 트러블슈팅 노트 정리 (면접용)
+- [ ] 데모용 시연 시나리오 리허설
+- 산출물: README, 시연 가능한 라이브 도메인, Playwright 리포트 스크린샷
+- 버퍼: 2h 남김 - 항상 어디서든 지연 발생
+
+### 의존성 그래프
+
+```
+Day1(인프라) -> Day2(인증) -> Day3(세션) -> Day4(FE) -> Day5(S3/통계) -> Day6(배포) -> Day7(E2E)
+```
+
+### 글로벌 리스크 / 완화
+
+| 리스크 | 영향 | 완화 |
+|---|---|---|
+| AWS 처음 셋업 (RDS, IAM, S3 CORS) | Day6 지연 | Day1~5 사이 자투리 시간에 미리 RDS만 만들어 두기 |
+| Next.js 16 신버전 이슈 | 라이브러리 호환 | 16 신기능은 안 쓰고 안정 API만 사용 |
+| EC2 t3.micro 메모리 | Spring Boot OOM | -Xmx512m, JIT 옵션 |
+| Vercel-EC2 CORS | 시간 소모 | Spring CORS 화이트리스트 사전 작성 |
+| Playwright 처음 | Day7 압박 | codegen 적극 활용 |
+
+---
+
+## 7. 보안 / 운영 고려사항
+
+### 7.1 인증/인가
+- 비밀번호: BCrypt strength 10 (Spring Security 기본 BCryptPasswordEncoder)
+- JWT:
+  - Access Token만 사용 (Refresh는 MVP 제외)
+  - 만료 1시간, HS256 + 256bit secret
+  - secret은 환경변수 JWT_SECRET (32자 이상)
+- 소유권 검증: 모든 /sessions/{id} 계열은 session.userId == authUserId 체크 -> 다르면 404 반환 (403 대신, 존재 자체를 숨김)
+
+### 7.2 입력 검증
+- Bean Validation (@NotNull, @Email, @Min, @Max, @Size)
+- @ControllerAdvice로 ValidationException -> 400 표준 응답 변환
+
+### 7.3 CORS
+
+BFF 패턴 도입으로 **운영 환경에서 EC2의 CORS는 사실상 불필요** (서버사이드 호출). 다만 안전망 + 로컬 개발용으로 설정 유지:
+
+```yaml
+# Spring 설정 (application-prod.yml)
+cors:
+  allowed-origins:
+    - http://localhost:3000              # 로컬 개발 (BFF 거치지 않는 직접 호출용)
+    - http://localhost:8080              # 로컬 백엔드 자체 테스트
+  allowed-methods: [GET, POST, PUT, DELETE, OPTIONS]
+  allowed-headers: [Authorization, Content-Type]
+  allow-credentials: false               # Bearer 헤더 방식이라 쿠키 불필요
+  max-age: 3600
+```
+
+- Vercel 운영은 BFF 경유라 EC2에 직접 도달하지 않음 -> CORS 미발동
+- 로컬 개발 시 Next.js dev server -> EC2 prod API 직접 호출하려면 localhost:3000 필요
+- S3 CORS는 별도 (5.4 참조)
+
+### 7.4 Rate Limiting (MVP 권장 제외, 언급만)
+- 필요 시 Bucket4j + Redis. MVP는 트래픽이 면접관 수십 명 수준 -> 생략
+- 다만 /auth/login에 한해 IP당 분당 5회는 Bucket4j 인메모리로 가능 (Could)
+
+### 7.5 로깅
+- Spring 기본 logback + JSON 인코더 (logstash-logback-encoder)
+- 요청별 traceId (UUID) MDC 주입, 응답 헤더 X-Trace-Id로 노출
+- 에러 로깅: WARN(클라이언트 에러), ERROR(서버 에러), 비밀/토큰 로깅 금지
+- 운영은 EC2 docker logs + journalctl. MVP에선 CloudWatch 연동 제외
+
+### 7.6 API 문서화
+- springdoc-openapi-starter-webmvc-ui
+- /swagger-ui/index.html 노출 (운영은 인증 게이팅 권장)
+- DTO에 @Schema 어노테이션으로 예시값 명시 -> 면접에서 화면으로 보여주기 좋음
+
+### 7.7 비밀 관리 결정
+- MVP: EC2 환경변수
+- 이유: AWS Secrets Manager는 비용 + IAM 설정 + SDK 호출 추가 작업 -> 7일 안에는 부담
+- 단, 면접에서 "운영 시 Secrets Manager + 자동 로테이션으로 마이그레이션 계획" 답변 준비
+
+### 7.8 S3 보안
+- BlockPublicAccess ON
+- 모든 GET/PUT은 presigned URL (만료 5분)
+- 버킷 정책에서 EC2 IAM Role만 PutObject 허용
+- 키 prefix users/{userId}/... -> 추후 IAM Condition으로 본인 폴더만 접근 강화 가능
+
+---
+
+## 8. 학습 효과 / 면접 어필 포인트
+
+### 8.1 기술 매핑 표
+
+| 기술 요구사항 | 이 프로젝트에서 실제로 한 것 |
+|---|---|
+| Java 17 + Spring Boot | 백엔드 전체 |
+| TypeScript + React + Next.js | 프론트 전체 |
+| React Query | 서버 상태/캐시/optimistic update |
+| Playwright | E2E 시나리오 2개 |
+| Vercel | FE 배포 |
+| Docker | docker-compose로 EC2 배포 |
+| AWS EC2 | 백엔드 호스팅 |
+| AWS S3 | 인증샷 + presigned URL |
+| AWS RDS | PostgreSQL 운영 |
+| 데이터 수집/분석 | PR/볼륨 집계 쿼리 |
+| AI 활용 | 개발 과정에 Claude Code/Copilot 적극 활용으로 1주 풀스택 완성 (면접 답변) |
+| BFF 패턴 | Next.js API Route를 BFF로 활용 (대기업 표준 패턴) |
+
+### 8.2 면접에서 구체적으로 말할 수 있는 결정 7가지
+
+1. "왜 PostgreSQL?"
+   - Spring Data JPA + PostgreSQL 조합이 안정적이고, NUMERIC 타입으로 무게(소수점) 정밀도 보장. JSONB도 가능하지만 MVP 스키마는 관계형으로 충분.
+
+2. "왜 presigned URL?"
+   - 이미지가 백엔드를 거치면 EC2 t3.micro 메모리/네트워크 부담. presigned PUT으로 클라이언트가 S3 직통 -> 백엔드는 인증/권한/메타데이터만 담당. AWS Well-Architected 패턴.
+
+3. "왜 BFF 패턴 (Next.js API Route)?"
+   - 도메인 미구매 결정 + Vercel HTTPS / EC2 HTTP -> Mixed Content 차단 문제. BFF로 서버사이드 프록시해서 브라우저는 same-origin HTTPS만 사용. EC2 IP 외부 노출 차단 효과 추가. JWT는 Bearer로 단순 forward. 운영 환경에서 도메인+HTTPS 적용 후에는 BFF를 유지하면서 캐싱/인증 강화 레이어로 활용 가능 (대기업 표준).
+
+3-1. "JWT 인증을 Bearer + localStorage로 한 이유?"
+   - 기존 JwtInterceptor 경험과 일치하는 흐름 + CORS 단순화로 MVP 빠른 완성. XSS 위험 인지하고 있으며, 운영 환경 마이그레이션 시 HttpOnly Secure SameSite=Lax 쿠키 + credentials 설정으로 전환 예정. 또한 Spring Security 표준 패턴 (JwtAuthenticationFilter extends OncePerRequestFilter)으로 구현해 SecurityContext + @AuthenticationPrincipal 활용.
+
+4. "세션 저장 트랜잭션 경계는?"
+   - workout_sessions + session_exercises + exercise_sets 3 테이블 INSERT를 단일 @Transactional. 부분 실패 시 데이터 정합성 깨짐 -> 모두 묶어 원자성 보장.
+
+5. "동시성 충돌은?"
+   - 1인 도메인이라 락 불필요. 다만 추후 그룹/챌린지 기능 추가 시 그룹 멤버 수 카운팅에 비관적 락(SELECT FOR UPDATE) 도입 예정.
+
+6. "인덱스 결정 근거"
+   - (user_id, performed_on DESC, id DESC) 복합 인덱스로 "내 기록 날짜순 페이징" 1회 인덱스 스캔으로 처리. id가 tiebreaker라 키셋 페이징 확장 가능.
+
+7. "React Query를 왜 도입?"
+   - 서버 상태(목록/상세)는 캐시/재요청/optimistic update가 필요. useState로 직접 관리하면 stale 데이터 처리 코드가 폭증. invalidateQueries로 일관성 유지.
+
+### 8.3 이 프로젝트로 어필 가능한 것 (요약)
+
+- 풀스택 자력 구축 경험: 인프라(RDS/S3/EC2)부터 FE/BE까지 1주 안에
+- AWS 실전: 학습 단계에서 실제로 IAM Role, presigned URL, SG 분리 구현
+- 신기술 빠른 학습: 처음 쓰는 React Query, Playwright, Next.js App Router를 단기간에 운영 가능 수준으로
+- 트레이드오프 의식: 오버엔지니어링 회피, 단순함과 정합성의 균형
+
+### 8.4 데모 시나리오 (면접 시연용 3분)
+
+1. (10초) Vercel 도메인 접속 -> 로그인 페이지
+2. (30초) 신규 회원가입 -> 자동 로그인 -> /sessions 진입
+3. (60초) 신규 세션 작성: 운동 2개 추가, 각 3세트 입력, 인증샷 업로드(presigned 흐름을 네트워크 탭으로 보여주기)
+4. (30초) 목록 페이지로 돌아와 방금 작성한 세션 확인
+5. (30초) 운동 통계 페이지: PR / 최근 기록
+6. (20초) Swagger UI / Playwright 리포트 / GitHub Actions 배포 로그 보여주기
+
+---
+
+## 부록 A. 환경변수 체크리스트
+
+### Backend (Spring Boot)
+- SPRING_PROFILES_ACTIVE=prod
+- DB_URL, DB_USERNAME, DB_PASSWORD
+- JWT_SECRET (32+ chars)
+- JWT_EXPIRES_IN=3600
+- AWS_REGION=ap-northeast-2
+- AWS_S3_BUCKET=workout-tracker-photos
+- CORS_ALLOWED_ORIGINS=https://workout-tracker.vercel.app,https://*.vercel.app
+
+### Frontend (Next.js)
+- NEXT_PUBLIC_API_BASE_URL=/api/proxy           # 브라우저는 항상 same-origin BFF로
+- EC2_API_URL=http://3.34.190.95:8080          # 서버사이드 전용, BFF가 사용
+  (Vercel Project Settings -> Environment Variables -> Server-side)
+
+## 부록 B. 디렉토리 구조
+
+### Backend
+```
+backend/
+├── build.gradle
+├── Dockerfile
+└── src/main/
+    ├── java/com/workouttracker/
+    │   ├── WorkoutTrackerApplication.java
+    │   ├── auth/        # 컨트롤러/서비스/JWT 필터
+    │   ├── user/
+    │   ├── exercise/
+    │   ├── session/     # 핵심
+    │   ├── photo/
+    │   ├── common/      # ErrorResponse, GlobalExceptionHandler, ApiResponse
+    │   └── config/      # SecurityConfig, CorsConfig, S3Config, OpenApiConfig
+    └── resources/
+        ├── application.yml
+        ├── application-prod.yml
+        └── db/migration/
+            ├── V1__init.sql
+            └── V2__seed_exercises.sql
+```
+
+### Frontend
+```
+frontend/
+├── package.json
+├── tsconfig.json
+├── tailwind.config.ts
+├── playwright.config.ts
+├── e2e/
+│   ├── auth.spec.ts
+│   └── session.spec.ts
+└── src/
+    ├── app/                # 위 4.1 참조
+    ├── components/
+    ├── features/
+    │   ├── auth/
+    │   ├── sessions/
+    │   └── exercises/
+    ├── lib/
+    │   ├── api.ts          # axios/ky 인스턴스
+    │   ├── queryKeys.ts
+    │   └── queryClient.ts
+    ├── middleware.ts
+    └── types/
+```
+
+---
+
+## 부록 C. 다음 단계 (developer에게 넘기는 부분)
+
+developer 에이전트는 본 설계를 기반으로:
+1. Day 1 작업부터 시작 (Spring Boot + Next.js 초기 스캐폴딩)
+2. 각 Day 산출물 단위로 커밋 (한국어 커밋 메시지)
+3. 의문점 발생 시 본 문서의 "결정 근거" 섹션 우선 확인, 부족하면 architect 재호출
+
+> 본 문서는 살아있는 문서. 구현 중 결정이 바뀌면 해당 섹션을 수정하고 변경 이유를 부록 D(향후 작성)에 누적.

@@ -1,0 +1,86 @@
+# =====================================================
+# OS 파일
+# =====================================================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# =====================================================
+# IDE / Editor
+# =====================================================
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+*.swp
+*.swo
+
+# =====================================================
+# 환경변수 / 비밀
+# =====================================================
+.env
+.env.local
+.env.*.local
+!.env.local.example
+
+# =====================================================
+# Node.js / Next.js
+# =====================================================
+node_modules/
+.next/
+out/
+.turbo/
+.vercel/
+next-env.d.ts.bak
+*.tsbuildinfo
+
+# 로그
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# =====================================================
+# Java / Gradle / Spring Boot
+# =====================================================
+# Gradle 빌드 결과물
+backend/build/
+backend/.gradle/
+backend/out/
+backend/bin/
+
+# Gradle wrapper의 jar는 추적 (체크인 표준)
+# !backend/gradle/wrapper/gradle-wrapper.jar
+
+# Java 컴파일 결과
+*.class
+
+# Spring Boot 패키지 결과물
+*.jar
+*.war
+*.ear
+
+# 단, Gradle wrapper jar 는 예외로 포함
+!gradle-wrapper.jar
+
+# =====================================================
+# 테스트 결과물
+# =====================================================
+coverage/
+test-results/
+playwright-report/
+playwright/.cache/
+
+# =====================================================
+# Docker
+# =====================================================
+# 볼륨/런타임 파일은 보통 docker가 관리하지만 안전망
+docker-data/
+
+# =====================================================
+# OpenAPI / 빌드 산출물
+# =====================================================
+**/HELP.md
