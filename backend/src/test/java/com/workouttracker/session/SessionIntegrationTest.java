@@ -13,7 +13,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -56,23 +55,13 @@ class SessionIntegrationTest {
     @BeforeEach
     void setUpExercises() {
         // 시드 데이터를 직접 INSERT (H2 + JPA create-drop 환경이므로 V2 마이그레이션 미적용)
-        Exercise e1 = new Exercise();
-        ReflectionTestUtils.setField(e1, "code", "BENCH_PRESS");
-        ReflectionTestUtils.setField(e1, "nameKo", "벤치프레스");
-        ReflectionTestUtils.setField(e1, "nameEn", "Bench Press");
-        ReflectionTestUtils.setField(e1, "bodyPart", "CHEST");
-        ReflectionTestUtils.setField(e1, "category", "COMPOUND");
-        ReflectionTestUtils.setField(e1, "isActive", true);
-        exerciseId1 = exerciseRepository.save(e1).getId();
+        exerciseId1 = exerciseRepository.save(
+                Exercise.create("BENCH_PRESS", "벤치프레스", "Bench Press", "CHEST", "COMPOUND", true)
+        ).getId();
 
-        Exercise e2 = new Exercise();
-        ReflectionTestUtils.setField(e2, "code", "OHP");
-        ReflectionTestUtils.setField(e2, "nameKo", "오버헤드프레스");
-        ReflectionTestUtils.setField(e2, "nameEn", "Overhead Press");
-        ReflectionTestUtils.setField(e2, "bodyPart", "SHOULDER");
-        ReflectionTestUtils.setField(e2, "category", "COMPOUND");
-        ReflectionTestUtils.setField(e2, "isActive", true);
-        exerciseId2 = exerciseRepository.save(e2).getId();
+        exerciseId2 = exerciseRepository.save(
+                Exercise.create("OHP", "오버헤드프레스", "Overhead Press", "SHOULDER", "COMPOUND", true)
+        ).getId();
     }
 
     @Test

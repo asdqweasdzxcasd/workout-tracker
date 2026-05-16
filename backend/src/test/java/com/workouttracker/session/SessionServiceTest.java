@@ -52,14 +52,8 @@ class SessionServiceTest {
     // ====================================================================
 
     private Exercise newExercise(long id, String code, String nameKo, String bodyPart, boolean active) {
-        Exercise e = new Exercise();
+        Exercise e = Exercise.create(code, nameKo, code, bodyPart, "COMPOUND", active);
         ReflectionTestUtils.setField(e, "id", id);
-        ReflectionTestUtils.setField(e, "code", code);
-        ReflectionTestUtils.setField(e, "nameKo", nameKo);
-        ReflectionTestUtils.setField(e, "nameEn", code);
-        ReflectionTestUtils.setField(e, "bodyPart", bodyPart);
-        ReflectionTestUtils.setField(e, "category", "COMPOUND");
-        ReflectionTestUtils.setField(e, "isActive", active);
         return e;
     }
 
