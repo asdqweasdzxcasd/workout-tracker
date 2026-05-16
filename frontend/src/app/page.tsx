@@ -1,15 +1,34 @@
+"use client";
+
 /**
- * 랜딩 페이지 (Day 1 스캐폴딩).
+ * 랜딩 페이지.
  *
- * 실제 라우팅(/login → /sessions 리다이렉트 등)은 Day 4 작업.
- * 지금은 빌드/실행 확인용 자리표시자.
+ * <p>설계: docs/design.md 4.1 page.tsx 랜딩
+ *
+ * <p>로그인 여부에 따라:
+ * <ul>
+ *   <li>토큰 있음 → /sessions</li>
+ *   <li>토큰 없음 → /login</li>
+ * </ul>
+ *
+ * <p>SSR 단계에서는 localStorage 접근 불가하므로 useEffect 안에서 라우팅한다.
  */
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+
+import { getAccessToken } from "@/lib/auth-storage";
+
 export default function Home() {
+  const router = useRouter();
+
+  useEffect(() => {
+    const token = getAccessToken();
+    router.replace(token ? "/sessions" : "/login");
+  }, [router]);
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 p-8 dark:bg-black">
-      <h1 className="text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-        workout-tracker
-      </h1>
+    <main className="flex min-h-screen items-center justify-center">
+      <p className="text-sm text-zinc-500">로딩 중...</p>
     </main>
   );
 }
