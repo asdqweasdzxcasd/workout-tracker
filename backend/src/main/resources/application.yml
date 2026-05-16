@@ -1,0 +1,46 @@
+# =====================================================
+# workout-tracker 기본 설정 (모든 프로필 공통)
+# 환경별 오버라이드는 application-{profile}.yml 에 작성
+# 실행 시 SPRING_PROFILES_ACTIVE 환경변수로 프로필 선택
+# 로컬 개발은 SPRING_PROFILES_ACTIVE=local
+# =====================================================
+spring:
+  application:
+    name: workout-tracker
+  # 기본 프로필: 명시적으로 지정하지 않으면 local 사용
+  profiles:
+    default: local
+
+  # JPA / Hibernate 공통 설정
+  jpa:
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+    hibernate:
+      # Flyway가 스키마를 관리하므로 Hibernate는 절대 DDL을 만지지 않음
+      ddl-auto: validate
+
+  # Flyway 마이그레이션 (부트 시 자동 실행)
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    validate-on-migrate: true
+
+server:
+  port: 8080
+
+# springdoc-openapi: /swagger-ui/index.html
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+logging:
+  level:
+    root: INFO
+    com.workouttracker: DEBUG
+    org.flywaydb: INFO
