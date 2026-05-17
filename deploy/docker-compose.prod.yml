@@ -1,0 +1,59 @@
+# =====================================================
+# workout-tracker 운영 환경 (AWS EC2 t3.small)
+# - Spring Boot 컨테이너 단독 (DB 는 RDS, 이미지 저장소는 S3)
+# - 재부팅 시 자동 복구: restart: unless-stopped
+# - 메모리 제한: 768MB (t3.small 2GB 환경 보호)
+# - .env 파일 (옆 디렉토리) 에서 시크릿 주입
+#
+# 실행:
+#   cd deploy
+#   docker compose -f docker-compose.prod.yml --env-file .env up -d --build
+#
+# 헬스체크:
+#   curl http://localhost:8080/actuator/health
+# =====================================================
+
+services:
+  workout-tracker-backend:
+    build:
+      # 이 compose 파일 기준 상위의 backend 디렉토리에서 빌드
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: workout-tracker-backend
+    restart: unless-stopped
+    # 시크릿/환경변수는 .env 파일에서 로드 (deploy/.env)
+    env_file:
+      - .env
+    environment:
+      # 컨테이너 내부 timezone 강제 (Dockerfile 에서도 설정했지만 안전망)
+      TZ: Asia/Seoul
+      # 프로필은 .env 의 SPRING_PROFILES_ACTIVE 우선, 미지정 시 prod
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+    ports:
+      # 호스트 8080 -> 컨테이너 8080
+      # Vercel BFF 가 EC2 퍼블릭 IP:8080 으로 호출
+      - "8080:8080"
+    # 메모리 제한 (t3.small 2GB 보호. JVM heap 384m + 메타스페이스 + 네이티브 영역 포함)
+    mem_limit: 768m
+    # 컨테이너 자체의 OOM killer 우선순위 낮춤 (다른 시스템 프로세스 보호)
+    mem_reservation: 512m
+    healthcheck:
+      # Spring Boot Actuator /health 가 UP 이면 healthy
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:8080/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    logging:
+      # 로그 크기 폭주 방지 (운영에서 docker logs 가 디스크 가득 채우는 사고 방지)
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - workout-tracker
+
+networks:
+  workout-tracker:
+    name: workout-tracker-network
+    driver: bridge
