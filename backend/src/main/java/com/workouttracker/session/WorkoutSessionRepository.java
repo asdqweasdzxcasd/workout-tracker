@@ -56,7 +56,8 @@ public interface WorkoutSessionRepository extends JpaRepository<WorkoutSession, 
                 s.memo,
                 COUNT(DISTINCT se.id),
                 COUNT(es.id),
-                COALESCE(SUM(es.weightKg * es.reps), 0)
+                COALESCE(SUM(es.weightKg * es.reps), 0),
+                (SELECT COUNT(p.id) FROM SessionPhoto p WHERE p.sessionId = s.id)
             )
             FROM WorkoutSession s
             LEFT JOIN s.exercises se

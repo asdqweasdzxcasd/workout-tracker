@@ -19,5 +19,6 @@ public record SessionListProjection(
         String memo,
         long exerciseCount,
         long totalSets,
-        BigDecimal totalVolume
+        BigDecimal totalVolume,
+        long photoCount
 ) {}

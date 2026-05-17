@@ -33,7 +33,7 @@ public record SessionListItemResponse(
         @Schema(description = "총 볼륨 (무게 x 횟수 합)", example = "4520.0")
         BigDecimal totalVolume,
 
-        @Schema(description = "인증샷 수 (Day 5에서 실제 집계 예정)", example = "0")
+        @Schema(description = "인증샷 수", example = "1")
         long photoCount
 ) {
     public static SessionListItemResponse of(SessionListProjection p) {
@@ -44,7 +44,7 @@ public record SessionListItemResponse(
                 p.exerciseCount(),
                 p.totalSets(),
                 p.totalVolume() != null ? p.totalVolume() : BigDecimal.ZERO,
-                0L
+                p.photoCount()
         );
     }
 }
