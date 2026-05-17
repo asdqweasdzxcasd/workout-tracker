@@ -49,6 +49,12 @@ dependencies {
     runtimeOnly  'io.jsonwebtoken:jjwt-impl:0.12.6'
     runtimeOnly  'io.jsonwebtoken:jjwt-jackson:0.12.6'
 
+    // AWS SDK v2 - S3 presigned URL / Object 작업
+    // - BOM 으로 버전 통일, presigner 와 s3 클라이언트만 사용
+    // - 자격증명은 DefaultCredentialsProvider 가 EC2 IAM Role / 환경변수 자동 탐색
+    implementation platform('software.amazon.awssdk:bom:2.28.0')
+    implementation 'software.amazon.awssdk:s3'
+
     // Test
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.security:spring-security-test'

@@ -31,6 +31,15 @@ jwt:
   secret: dummy-test-secret-at-least-32-characters-long-for-hs256-algorithm-OK
   expires-in-seconds: 3600
 
+# 통합 테스트에서 S3 빈은 실제 호출되지 않지만 빈 생성에는 region/bucket 이 필요.
+# DefaultCredentialsProvider 는 실 자격증명이 없어도 빈 생성 자체는 성공한다.
+aws:
+  region: ap-northeast-2
+  s3:
+    bucket: test-bucket
+    presign-upload-expires-sec: 300
+    presign-download-expires-sec: 900
+
 logging:
   level:
     org.hibernate.SQL: DEBUG
