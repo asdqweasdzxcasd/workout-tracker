@@ -71,7 +71,8 @@ export interface ExerciseResponse {
 }
 
 export interface ExerciseListResponse {
-  items: ExerciseResponse[];
+  /** 백엔드 응답 키는 'content' (ExerciseListResponse.java) */
+  content: ExerciseResponse[];
 }
 
 // ---------------------------------------------------------------------------

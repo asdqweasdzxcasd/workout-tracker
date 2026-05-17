@@ -10,5 +10,5 @@ export async function fetchExercises(bodyPart?: string): Promise<ExerciseRespons
   const { data } = await api.get<ExerciseListResponse>("/exercises", {
     params: bodyPart ? { bodyPart } : undefined,
   });
-  return data.items;
+  return data.content;
 }
