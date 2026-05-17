@@ -1,0 +1,76 @@
+# =====================================================
+# 운영 프로필 (AWS EC2 + RDS PostgreSQL 16 + S3)
+# - 모든 값은 환경변수로만 받음 (코드 하드코딩 절대 금지)
+# - .env 파일은 git 미포함, deploy/.env.example 참고
+# - 누락 시 부팅 실패하도록 기본값 미지정 (DB_URL, JWT_SECRET 등)
+# =====================================================
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      # t3.small + Spring Boot 단일 인스턴스 가정. 동접 트래픽 작아 풀 작게 유지
+      maximum-pool-size: 10
+      minimum-idle: 2
+      pool-name: WorkoutTrackerHikariCP
+
+  jpa:
+    # 운영은 SQL 로그 끔 (성능 + 로그 노이즈 방지)
+    show-sql: false
+    hibernate:
+      # Flyway가 스키마를 관리. Hibernate는 검증만 수행
+      ddl-auto: validate
+
+  flyway:
+    enabled: true
+
+# =====================================================
+# JWT (운영 시크릿은 반드시 .env / Secrets Manager 로 주입)
+# =====================================================
+jwt:
+  secret: ${JWT_SECRET}
+  expires-in-seconds: ${JWT_EXPIRES_IN:3600}
+
+# =====================================================
+# AWS S3 (인증샷)
+# - 자격증명은 DefaultCredentialsProvider 가 자동 탐색
+#   1) 환경변수 AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY (Phase 6.2)
+#   2) EC2 IAM Role (Phase 6.3 - 권장)
+# =====================================================
+aws:
+  region: ${AWS_REGION:ap-northeast-2}
+  s3:
+    bucket: ${AWS_S3_BUCKET}
+    presign-upload-expires-sec: ${AWS_S3_PRESIGN_UPLOAD_EXPIRES_SEC:300}
+    presign-download-expires-sec: ${AWS_S3_PRESIGN_DOWNLOAD_EXPIRES_SEC:900}
+
+# =====================================================
+# CORS (BFF 경유라 운영에서 실질 미사용, 안전망 + 로컬 dev -> 운영 직접호출용)
+# =====================================================
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+
+# =====================================================
+# Actuator (Docker healthcheck / ALB target group 용)
+# - health, info 만 노출
+# - health 상세는 외부 노출 안 함 (보안)
+# =====================================================
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: never
+  health:
+    db:
+      enabled: true
+
+logging:
+  level:
+    root: INFO
+    com.workouttracker: INFO
+    org.flywaydb: INFO

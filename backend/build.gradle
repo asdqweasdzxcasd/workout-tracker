@@ -27,6 +27,8 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
+    // Actuator - /actuator/health 엔드포인트로 Docker healthcheck / ALB target group 헬스체크
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
 
     // DB
     runtimeOnly 'org.postgresql:postgresql'
