@@ -1,0 +1,46 @@
+# =====================================================
+# Docker 빌드 컨텍스트에서 제외할 항목
+# - 컨텍스트 크기 줄여 빌드 속도/네트워크 절약
+# - 보안: .env, IDE 설정 등 유출 방지
+# =====================================================
+
+# Gradle 빌드 산출물 (컨테이너 안에서 다시 빌드)
+build/
+.gradle/
+out/
+bin/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 환경변수 / 비밀
+.env
+.env.*
+!.env.example
+
+# 로그
+*.log
+logs/
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# 문서 (이미지 빌드 불필요)
+README.md
+HELP.md
+*.md
+
+# 테스트 결과
+coverage/
+test-results/
