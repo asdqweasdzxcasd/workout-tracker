@@ -11,6 +11,21 @@
 
 ---
 
+## 로컬 vs 운영 환경
+
+| 항목 | 로컬 (local) | 운영 (prod) |
+|---|---|---|
+| 프로필 | `application-local.yml` | `application-prod.yml` |
+| Spring Boot 실행 | `./gradlew bootRun` (호스트) | Docker 컨테이너 (`deploy/docker-compose.prod.yml`) |
+| DB | `docker-compose.local.yml` 의 PostgreSQL 컨테이너 | AWS RDS PostgreSQL 16 |
+| 이미지 저장소 | (사용 안 함 or 로컬 IAM 키) | AWS S3 (`silee-workout-tracker-photos`) |
+| 시크릿 | `.env.local` (git 제외) | `deploy/.env` (git 제외) |
+| 자동 재시작 | 수동 | `restart: unless-stopped` |
+
+운영 배포 절차는 [`deploy/DEPLOY.md`](./deploy/DEPLOY.md) 참고.
+
+---
+
 ## 로컬 실행 방법
 
 사전 요구:
