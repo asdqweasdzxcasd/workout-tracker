@@ -4,11 +4,21 @@
  * <p>설계: docs/design.md 3.5 GET /exercises
  */
 import { api } from "@/lib/api";
-import type { ExerciseListResponse, ExerciseResponse } from "@/types/api";
+import type {
+  ExerciseListResponse,
+  ExerciseResponse,
+  ExerciseStatsResponse,
+} from "@/types/api";
 
 export async function fetchExercises(bodyPart?: string): Promise<ExerciseResponse[]> {
   const { data } = await api.get<ExerciseListResponse>("/exercises", {
     params: bodyPart ? { bodyPart } : undefined,
   });
   return data.content;
+}
+
+/** GET /exercises/{id}/stats - 운동별 PR + 최근 5 세션. */
+export async function fetchExerciseStats(id: number): Promise<ExerciseStatsResponse> {
+  const { data } = await api.get<ExerciseStatsResponse>(`/exercises/${id}/stats`);
+  return data;
 }
