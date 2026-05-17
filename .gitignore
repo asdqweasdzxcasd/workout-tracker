@@ -25,6 +25,9 @@ desktop.ini
 .env.local
 .env.*.local
 !.env.local.example
+# 운영 배포용 시크릿 (deploy/.env) 절대 commit 금지
+deploy/.env
+!deploy/.env.example
 
 # =====================================================
 # Node.js / Next.js
