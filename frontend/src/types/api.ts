@@ -140,3 +140,64 @@ export interface SessionSetDetail {
   weightKg: number;
   reps: number;
 }
+
+// ---------------------------------------------------------------------------
+// Photo (Day 5 - S3 presigned 워크플로우)
+// ---------------------------------------------------------------------------
+
+/** PUT presigned URL 발급 요청. */
+export interface PresignRequest {
+  contentType: string;
+  sizeBytes: number;
+}
+
+export interface PresignResponse {
+  uploadUrl: string;
+  s3Key: string;
+  expiresInSec: number;
+}
+
+/** 업로드 완료 후 메타데이터 등록 요청. */
+export interface PhotoMetaRequest {
+  s3Key: string;
+  contentType: string;
+  sizeBytes: number;
+}
+
+export interface PhotoResponse {
+  id: number;
+  sessionId: number;
+  s3Key: string;
+  contentType: string;
+  sizeBytes: number;
+  uploadedAt: string;
+  /** GET presigned URL (15분 만료). 갱신은 페이지 재진입 시 자동. */
+  downloadUrl: string;
+}
+
+export interface PhotoListResponse {
+  content: PhotoResponse[];
+}
+
+// ---------------------------------------------------------------------------
+// Exercise Stats (Day 5 - PR / 최근 기록)
+// ---------------------------------------------------------------------------
+
+export interface TopSet {
+  weightKg: number;
+  reps: number;
+}
+
+export interface RecentSession {
+  sessionId: number;
+  performedOn: string;
+  topSet: TopSet | null;
+}
+
+export interface ExerciseStatsResponse {
+  exerciseId: number;
+  name: string;
+  personalRecordKg: number | null;
+  personalRecordDate: string | null;
+  recentSessions: RecentSession[];
+}

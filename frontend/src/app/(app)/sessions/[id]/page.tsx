@@ -15,13 +15,15 @@
  * <p>Next.js 16: page params 가 Promise 이므로 React.use(params) 로 unwrap.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Trash2 } from "lucide-react";
+import { ArrowLeft, BarChart3, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { deleteSession, fetchSession } from "@/features/sessions/api";
+import { PhotoGallery } from "@/features/sessions/components/photo-gallery";
+import { PhotoUploader } from "@/features/sessions/components/photo-uploader";
 import { extractErrorMessage } from "@/lib/api";
 import { formatPerformedOn, formatTimestamp, formatWeightKg } from "@/lib/format";
 import { qk } from "@/lib/query-keys";
@@ -120,12 +122,22 @@ export default function SessionDetailPage({ params }: Props) {
       <ul className="space-y-3">
         {data.exercises.map((ex) => (
           <li key={ex.orderNo} className="rounded-lg border border-zinc-200 bg-white p-4">
-            <h2 className="text-sm font-semibold text-zinc-900">
-              {ex.orderNo}. {ex.exercise.nameKo}
-              <span className="ml-2 text-xs font-normal text-zinc-500">
-                {ex.exercise.nameEn}
-              </span>
-            </h2>
+            <div className="flex items-start justify-between gap-2">
+              <h2 className="text-sm font-semibold text-zinc-900">
+                {ex.orderNo}. {ex.exercise.nameKo}
+                <span className="ml-2 text-xs font-normal text-zinc-500">
+                  {ex.exercise.nameEn}
+                </span>
+              </h2>
+              <Link
+                href={`/exercises/${ex.exercise.id}/stats`}
+                className="inline-flex items-center gap-1 rounded-md border border-zinc-200 px-2 py-0.5 text-xs text-zinc-600 hover:bg-zinc-50"
+                aria-label="운동 통계 보기"
+              >
+                <BarChart3 size={12} />
+                <span>통계</span>
+              </Link>
+            </div>
 
             <div className="mt-3 grid grid-cols-[28px_1fr_1fr] gap-2 text-xs font-medium text-zinc-500">
               <span>#</span>
@@ -144,6 +156,13 @@ export default function SessionDetailPage({ params }: Props) {
           </li>
         ))}
       </ul>
+
+      {/* Day 5: 인증샷 영역 */}
+      <PhotoUploader sessionId={sessionId} />
+      <div className="rounded-lg border border-zinc-200 bg-white p-4">
+        <h2 className="mb-2 text-sm font-semibold text-zinc-900">사진</h2>
+        <PhotoGallery sessionId={sessionId} />
+      </div>
     </div>
   );
 }

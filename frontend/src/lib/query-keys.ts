@@ -9,7 +9,9 @@
 export const qk = {
   me: ["me"] as const,
   exercises: (bodyPart?: string) => ["exercises", { bodyPart: bodyPart ?? null }] as const,
+  exerciseStats: (id: number) => ["exercises", id, "stats"] as const,
   sessions: (page: number) => ["sessions", { page }] as const,
   sessionsAll: ["sessions"] as const, // invalidateQueries 용 prefix
   session: (id: number) => ["sessions", id] as const,
+  sessionPhotos: (sessionId: number) => ["sessions", sessionId, "photos"] as const,
 };
