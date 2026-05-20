@@ -5,7 +5,7 @@
  *
  * <p>설계: docs/design.md 4.2 SessionCard, 표시 규약: totalVolume "1640.0 kg"
  *
- * <p>photoCount 는 Day 5 이후 표시 - 현재(0)는 숨김 처리한다.
+ * <p>photoCount 는 Phase 5 이후 표시 - 현재(0)는 숨김 처리한다.
  */
 import { Calendar, Dumbbell, Image as ImageIcon, Layers } from "lucide-react";
 import Link from "next/link";

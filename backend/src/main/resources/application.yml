@@ -47,7 +47,7 @@ springdoc:
     path: /swagger-ui.html
 
 # =====================================================
-# AWS S3 (Day 5 - 인증샷)
+# AWS S3 (Phase 5 - 인증샷)
 # - region/bucket 은 환경변수로 오버라이드 (코드 하드코딩 금지)
 # - 자격증명은 DefaultCredentialsProvider 가 자동 탐색
 #   (운영 EC2: IAM Role / 로컬: AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY)

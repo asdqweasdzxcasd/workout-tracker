@@ -1,21 +1,19 @@
 # workout-tracker MVP 설계 문서
 
-> 작성일: 2026-05-16  
-> 작성자: @architect  
-> 목적:    충족을 위한 풀스택 MVP 프로젝트 설계  
-> 범위: 1주 (40시간) 내 완성, 면접 시연용
+> 목적: AWS / Vercel / Spring Boot / Next.js 등 풀스택 운영 스택을 실제로 다뤄보는 개인 학습 프로젝트
+> 범위: MVP 1세트 (운영 배포 + E2E 자동화 포함)
 
 ---
 
 ## 0. 요약 (TL;DR)
 
-- 도메인: 운동 세션/세트 기록 + 인증샷 업로드 -> 웰니스/피트니스 도메인 매칭
+- 도메인: 운동 세션/세트 기록 + 인증샷 업로드 (간단한 1인 사용 도메인)
 - 아키텍처: Browser -> Vercel(Next.js, BFF) -> EC2(Spring Boot in Docker) -> RDS(PostgreSQL), 이미지는 S3 presigned URL
 - BFF 패턴: Vercel의 Next.js API Route가 EC2로 서버사이드 프록시 (Mixed Content 회피 + EC2 IP 은닉)
 - 핵심 트레이드오프:
   - 단순함 우선: 모놀리식 Spring Boot 1개 + Next.js 1개. MSA/큐/캐시는 모두 제외
   - 데이터 정합성 우선: 세션-세트 저장은 단일 트랜잭션, 동시성 충돌이 거의 없는 1인 사용 도메인이므로 락은 최소화
-  - 학습효과 우선: React Query/Playwright/Next.js BFF/S3 presigned URL 등 주요 기술를 실제 코드로 시연 가능하게 설계
+  - 학습효과 우선: React Query / Playwright / Next.js BFF / S3 presigned URL 등 주요 기술을 실제 코드로 다뤄보는 데 초점
   - 도메인 미구매 결정에 따라 Vercel 기본 도메인 + EC2 IP 직접 접근, HTTPS는 BFF로 해결
 
 ---
@@ -36,28 +34,9 @@
 | Should | 인증샷 S3 presigned URL 업로드 | 3h | PUT presigned, 메타데이터만 DB |
 | Should | Playwright E2E (로그인 -> 기록 -> 조회) | 3h | 시나리오 2~3개 |
 | Should | Swagger/OpenAPI 문서 자동화 | 1h | springdoc-openapi |
-| Could | 주간 통계 (총 볼륨 = 무게x횟수 합계) | 2h | 시간 남으면 |
+| Could | 주간 통계 (총 볼륨 = 무게×횟수 합계) | 2h | 시간 남으면 |
 | Could | 소셜 로그인 (Google OAuth) | 4h | 제외 권장 |
 | Could | 이미지 썸네일 (Lambda) | - | 제외 |
-
-합계 (Must+Should): 약 32.5h / 40h -> 7.5h 버퍼 확보
-
-### 1.3 JD "AI 활용 능력" 처리 방침
-
-요구사항 4번째 "AI를 활용한 업무 효율화 능력"은 코드에 AI 기능을 넣지 않고 **개발 과정의 AI 도구 활용**으로 어필. 이유:
-- AI 기능을 위해 OpenAI API 호출 등을 추가하면 4h+ 일정 추가 + 비용 발생
-- 일반적 의미는 보통 "사내 업무에 AI를 활용해 생산성 올리기" -> 면접 답변으로 충분
-- 면접 답변 카드: "1주 안에 풀스택 완성한 핵심 비결은 Claude Code/Copilot 등 AI 도구로 부족 기술(Next.js, Playwright, React Query) 빠르게 학습하면서 트레이드오프 검토는 직접 수행한 것"
-
-### 1.2 의도적으로 제외한 것
-
-- 운동 종류 사용자 추가 기능 (시드만 사용)
-- 비밀번호 재설정/이메일 인증 (메일 인프라 부담)
-- 관리자 페이지
-- 다국어
-- 다크모드
-
-> 이유: MVP는 "주요 기술를 실제 코드로 보여주는 것"이 목적. 깊이가 없는 기능 추가보다 핵심 흐름의 완성도가 면접에서 효과적임.
 
 ---
 
@@ -625,7 +604,7 @@ sequenceDiagram
 | 개발자 익숙도 | 기존 JwtInterceptor 경험과 동일 | 학습 필요 |
 | MVP 1주 일정 | 빠름 | 시간 소요 |
 
-→ MVP에서는 Bearer로 빠르게 완성하고, 면접 답변에서 "운영 시 HttpOnly 쿠키 마이그레이션 계획"으로 보완.
+→ MVP에서는 Bearer로 빠르게 완성하고, 운영 시 HttpOnly 쿠키로 마이그레이션은 후속 과제로 둠.
 
 #### 운영 시 마이그레이션 답변 카드
 
@@ -742,7 +721,7 @@ sequenceDiagram
 왜 presigned URL?
 - 큰 파일이 백엔드를 거치지 않음 -> EC2 메모리/네트워크 절약
 - t3.micro/t4g.micro 같은 작은 인스턴스에 적합
-- AWS Well-Architected 권장 패턴 -> 면접 어필 포인트
+- AWS Well-Architected 권장 패턴
 
 ### 5.5 환경별 설정 전략
 
@@ -758,45 +737,47 @@ sequenceDiagram
 
 ---
 
-## 6. 7일 구현 일정
+## 6. 구현 단계 (Phase)
 
-> **본 절은 Day 0 설계 시점의 계획 스냅샷이다.** 실제 진행/완료 상태는 [`../README.md`](../README.md) 의 "7일 일정" 표와 [`../deploy/DEPLOY.md`](../deploy/DEPLOY.md) "진행한 Phase 요약" 을 참조. 본문의 `- [ ]` 체크박스는 의도적으로 미체크 상태로 보존 (계획-실행 비교용).
+> **본 절은 초기 설계 시점의 계획 스냅샷이다.** 실제 진행/완료 상태는 [`../README.md`](../README.md) 의 단계 표와 [`../deploy/DEPLOY.md`](../deploy/DEPLOY.md) "진행한 Phase 요약" 을 참조. 본문의 `- [ ]` 체크박스는 의도적으로 미체크 상태로 보존 (계획-실행 비교용).
 
-### 가정
-- 하루 5~6시간 작업 기준 (총 ~40h)
-- Day 1 = 설계 완료 직후 (2026-05-16)
+### Phase 의존성
 
-### 일별 계획
+```
+P1 (인프라) → P2 (인증) → P3 (세션) → P4 (FE+BFF) → P5 (S3/통계) → P6 (배포) → P7 (E2E)
+```
 
-#### Day 1 (월) - 인프라/뼈대 (6h)
+### 단계별 계획
+
+#### Phase 1 — 인프라 / 뼈대 (~6h)
 - [ ] Spring Boot 프로젝트 생성 (Java 17, Gradle, Spring Web/Security/JPA/Validation/springdoc)
 - [ ] Next.js 16 프로젝트 생성 (TS, Tailwind, App Router, ESLint)
 - [ ] 로컬 docker-compose: postgres 16 + adminer
 - [ ] Flyway 설정 + V1__init.sql (DDL)
 - [ ] application.yml local 프로필
-- 산출물: ./gradlew bootRun 가능, npm run dev 가능, DB 마이그레이션 성공
-- 리스크: Gradle 의존성/플러그인 호환성 -> 30분 안에 안 풀리면 Spring Initializr 그대로 사용
+- 산출물: `./gradlew bootRun` 가능, `npm run dev` 가능, DB 마이그레이션 성공
+- 리스크: Gradle 의존성/플러그인 호환성 → 30분 안에 안 풀리면 Spring Initializr 그대로 사용
 
-#### Day 2 (화) - 인증 + 운동 종류 (6h) [Day1 의존]
+#### Phase 2 — 인증 + 운동 종류 (~6h) [P1 의존]
 - [ ] User 엔티티/리포지토리/서비스/컨트롤러
 - [ ] Spring Security + JWT 필터 + BCrypt
 - [ ] 회원가입/로그인 API, /auth/me
 - [ ] Exercise 엔티티 + 시드 SQL (Flyway V2)
 - [ ] /exercises GET 구현
-- 산출물: Postman으로 회원가입 -> 로그인 -> 토큰으로 /auth/me, /exercises 호출 성공
-- 리스크: Spring Security 설정 처음이면 1~2h 추가 가능 -> 공식 가이드 그대로 복사 권장
+- 산출물: 회원가입 → 로그인 → 토큰으로 /auth/me, /exercises 호출 성공
+- 리스크: Spring Security 설정 처음이면 1~2h 추가 가능 → 공식 가이드 그대로 복사 권장
 
-#### Day 3 (수) - 세션 도메인 (6h) [Day2 의존]
+#### Phase 3 — 세션 도메인 (~6h) [P2 의존]
 - [ ] WorkoutSession/SessionExercise/ExerciseSet 엔티티 + 양방향 관계 + cascade
 - [ ] DTO + Bean Validation
 - [ ] POST /sessions 단일 트랜잭션 구현
 - [ ] GET /sessions 페이징 (Slice 또는 Page)
 - [ ] GET /sessions/{id}, DELETE /sessions/{id} + 소유권 검증
 - [ ] 단위 테스트 1~2개 (서비스 레이어)
-- 산출물: 모든 세션 CRUD 동작, Swagger UI에서 확인
-- 리스크: JPA cascade/orphanRemoval 잘못 설정 시 디버깅 길어짐 -> @OneToMany cascade=ALL, orphanRemoval=true로 단순화
+- 산출물: 모든 세션 CRUD 동작, Swagger UI 에서 확인
+- 리스크: JPA cascade/orphanRemoval 잘못 설정 시 디버깅 길어짐 → @OneToMany cascade=ALL, orphanRemoval=true 로 단순화
 
-#### Day 4 (목) - Frontend 인증 + 목록 + BFF (6h) [Day2,3 의존]
+#### Phase 4 — Frontend 인증 + 목록 + BFF (~6h) [P2/P3 의존]
 - [ ] axios/ky 인스턴스 + 인터셉터 (Bearer)
 - [ ] React Query 셋업
 - [ ] **src/app/api/proxy/[...path]/route.ts BFF 프록시 구현**
@@ -804,47 +785,36 @@ sequenceDiagram
 - [ ] proxy.ts 라우트 가드 (또는 클라이언트 가드)
 - [ ] /sessions 목록 페이지 + Pagination
 - [ ] /sessions/new 페이지 (운동 추가, 세트 추가 UX)
-- 산출물: 로그인 -> 세션 작성 -> 목록에 나옴 (모든 API 호출이 /api/proxy 경유 확인)
-- 리스크: 동적 폼 (운동 N개 x 세트 M개) UX. react-hook-form useFieldArray로 시간 절약
-- 리스크2: BFF 라우트가 스트리밍/큰 페이로드 처리 시 메모리 주의 (이미지는 BFF 경유 안 함 -> presigned 직접 PUT)
+- 산출물: 로그인 → 세션 작성 → 목록에 나옴 (모든 API 호출이 /api/proxy 경유)
+- 리스크: 동적 폼 (운동 N개 × 세트 M개) UX. react-hook-form useFieldArray 활용
+- 리스크2: BFF 라우트가 큰 페이로드 처리 시 메모리 주의 (이미지는 BFF 경유 안 함 → presigned 직접 PUT)
 
-#### Day 5 (금) - PR/통계 + S3 인증샷 (6h) [Day3,4 의존]
+#### Phase 5 — PR/통계 + S3 인증샷 (~6h) [P3/P4 의존]
 - [ ] AWS SDK 추가, S3 클라이언트 빈 (IAM Role 기반)
 - [ ] POST /photos/presign 구현 + 검증
 - [ ] POST /sessions/{id}/photos 메타데이터 등록
-- [ ] FE: PhotoUploader 컴포넌트 (presign -> PUT -> metadata)
+- [ ] FE: PhotoUploader 컴포넌트 (presign → PUT → metadata)
 - [ ] GET /exercises/{id}/stats (PR 1쿼리)
 - [ ] FE: 운동별 통계 페이지
 - 산출물: 실제 S3 버킷에 이미지 업로드 성공
-- 리스크: CORS 설정 (S3 버킷 CORS, EC2 CORS) -> 사전에 설정 점검
+- 리스크: CORS 설정 (S3 버킷 CORS, EC2 CORS) → 사전에 설정 점검
 
-#### Day 6 (토) - AWS 배포 (6h) [Day5 의존]
+#### Phase 6 — AWS 배포 (~6h) [P5 의존]
 - [ ] RDS 생성 (db.t4g.micro, public access OFF, ec2-sg만 허용)
 - [ ] S3 버킷 생성 + 버킷 정책 + CORS
 - [ ] EC2 IAM Role 부착 (S3 권한)
-- [ ] EC2에 docker-compose.yml 배치 (nginx + spring-boot 컨테이너)
+- [ ] EC2 에 docker-compose.yml 배치
 - [ ] Dockerfile (멀티스테이지 빌드)
-- [ ] GitHub Actions: main push -> EC2로 rsync -> docker-compose up -d --build
-- [ ] Vercel: 레포 연결, ENV 설정 (API_BASE_URL)
-- [ ] 도메인/HTTPS (Cloudflare or Let's Encrypt)
-- 산출물: 실제 도메인으로 로그인/세션작성/사진업로드 end-to-end 동작
-- 리스크: 가장 시간 흔들리는 날. CORS, SG, RDS 접속, JVM 메모리(t3.micro 1GB)에서 OOM 가능 -> JAVA_TOOL_OPTIONS=-Xmx512m
+- [ ] ALB + Target Group + Blue/Green 2 컨테이너 + Rolling 배포 스크립트
+- [ ] Vercel: 레포 연결, ENV 설정
+- 산출물: 라이브 도메인으로 로그인/세션작성/사진업로드 end-to-end 동작
+- 리스크: CORS, SG, RDS 접속, JVM 메모리 (t3.small) OOM 가능 → JAVA_TOOL_OPTIONS=-Xmx384m
 
-#### Day 7 (일) - E2E + 문서화 + 마감 (4h) [Day6 의존]
-- [ ] Playwright 설치 + 시나리오 2개:
-  - signup -> login -> create session -> list 확인
-  - login -> exercise stats 확인
-- [ ] springdoc-openapi-ui 확인, README 작성
-- [ ] 트러블슈팅 노트 정리 (면접용)
-- [ ] 데모용 시연 시나리오 리허설
-- 산출물: README, 시연 가능한 라이브 도메인, Playwright 리포트 스크린샷
-- 버퍼: 2h 남김 - 항상 어디서든 지연 발생
-
-### 의존성 그래프
-
-```
-Day1(인프라) -> Day2(인증) -> Day3(세션) -> Day4(FE) -> Day5(S3/통계) -> Day6(배포) -> Day7(E2E)
-```
+#### Phase 7 — E2E + 문서화 (~4h) [P6 의존]
+- [ ] Playwright 셋업 + 시나리오 (auth / exercises / session-crud)
+- [ ] GitHub Actions E2E CI (PostgreSQL service + bootRun + Playwright)
+- [ ] README / DEPLOY.md / 다이어그램 정리
+- 산출물: 라이브 도메인, E2E 11 시나리오 자동 통과, CI 뱃지
 
 ### 글로벌 리스크 / 완화
 
@@ -893,7 +863,7 @@ cors:
 - S3 CORS는 별도 (5.4 참조)
 
 ### 7.4 Rate Limiting (MVP 권장 제외, 언급만)
-- 필요 시 Bucket4j + Redis. MVP는 트래픽이 면접관 수십 명 수준 -> 생략
+- 필요 시 Bucket4j + Redis. MVP는 트래픽이 방문자 수 명 수준 -> 생략
 - 다만 /auth/login에 한해 IP당 분당 5회는 Bucket4j 인메모리로 가능 (Could)
 
 ### 7.5 로깅
@@ -905,12 +875,12 @@ cors:
 ### 7.6 API 문서화
 - springdoc-openapi-starter-webmvc-ui
 - /swagger-ui/index.html 노출 (운영은 인증 게이팅 권장)
-- DTO에 @Schema 어노테이션으로 예시값 명시 -> 면접에서 화면으로 보여주기 좋음
+- DTO에 @Schema 어노테이션으로 예시값 명시 -> Swagger 화면에서 시연 가능
 
 ### 7.7 비밀 관리 결정
 - MVP: EC2 환경변수
 - 이유: AWS Secrets Manager는 비용 + IAM 설정 + SDK 호출 추가 작업 -> 7일 안에는 부담
-- 단, 면접에서 "운영 시 Secrets Manager + 자동 로테이션으로 마이그레이션 계획" 답변 준비
+- 단, 운영 시 Secrets Manager + 자동 로테이션 마이그레이션은 후속 과제로 둠
 
 ### 7.8 S3 보안
 - BlockPublicAccess ON
@@ -920,26 +890,27 @@ cors:
 
 ---
 
-## 8. 학습 효과 / 면접 어필 포인트
+## 8. 학습 효과 / talking point
 
-### 8.1 기술 매핑 표
+### 8.1 다뤄본 기술 스택
 
-| 기술 요구사항 | 이 프로젝트에서 실제로 한 것 |
+| 기술 | 이 프로젝트에서 실제로 한 것 |
 |---|---|
 | Java 17 + Spring Boot | 백엔드 전체 |
-| TypeScript + React + Next.js | 프론트 전체 |
+| TypeScript + React + Next.js 16 | 프론트 전체 |
 | React Query | 서버 상태/캐시/optimistic update |
-| Playwright | E2E 시나리오 2개 |
-| Vercel | FE 배포 |
-| Docker | docker-compose로 EC2 배포 |
-| AWS EC2 | 백엔드 호스팅 |
+| Playwright | E2E 시나리오 11개 + GitHub Actions CI |
+| Vercel | FE 배포 (BFF 환경변수 연동) |
+| Docker | 멀티스테이지 Dockerfile + docker-compose |
+| AWS EC2 | 백엔드 호스팅 + Blue/Green 2 컨테이너 |
+| AWS ALB | Target Group + Rolling 무중단 배포 |
+| AWS RDS | PostgreSQL 16 운영 (SG 격리) |
 | AWS S3 | 인증샷 + presigned URL |
-| AWS RDS | PostgreSQL 운영 |
-| 데이터 수집/분석 | PR/볼륨 집계 쿼리 |
-| AI 활용 | 개발 과정에 Claude Code/Copilot 적극 활용으로 1주 풀스택 완성 (면접 답변) |
-| BFF 패턴 | Next.js API Route를 BFF로 활용 (대기업 표준 패턴) |
+| AWS IAM Role | EC2 IMDSv2 자격증명 (AccessKey 미사용) |
+| 데이터 집계 쿼리 | PR/볼륨 1쿼리 추출 |
+| BFF 패턴 | Next.js API Route 를 BFF 로 활용 (Mixed Content 회피) |
 
-### 8.2 면접에서 구체적으로 말할 수 있는 결정 7가지
+### 8.2 구체적으로 말할 수 있는 설계 결정 7가지
 
 1. "왜 PostgreSQL?"
    - Spring Data JPA + PostgreSQL 조합이 안정적이고, NUMERIC 타입으로 무게(소수점) 정밀도 보장. JSONB도 가능하지만 MVP 스키마는 관계형으로 충분.
@@ -972,7 +943,7 @@ cors:
 - 신기술 빠른 학습: 처음 쓰는 React Query, Playwright, Next.js App Router를 단기간에 운영 가능 수준으로
 - 트레이드오프 의식: 오버엔지니어링 회피, 단순함과 정합성의 균형
 
-### 8.4 데모 시나리오 (면접 시연용 3분)
+### 8.4 데모 시나리오 (데모 시연용 3분)
 
 1. (10초) Vercel 도메인 접속 -> 로그인 페이지
 2. (30초) 신규 회원가입 -> 자동 로그인 -> /sessions 진입
@@ -1054,7 +1025,7 @@ frontend/
 ## 부록 C. 다음 단계 (developer에게 넘기는 부분)
 
 developer 에이전트는 본 설계를 기반으로:
-1. Day 1 작업부터 시작 (Spring Boot + Next.js 초기 스캐폴딩)
+1. Phase 1 작업부터 시작 (Spring Boot + Next.js 초기 스캐폴딩)
 2. 각 Day 산출물 단위로 커밋 (한국어 커밋 메시지)
 3. 의문점 발생 시 본 문서의 "결정 근거" 섹션 우선 확인, 부족하면 architect 재호출
 

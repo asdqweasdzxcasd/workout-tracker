@@ -142,7 +142,7 @@ export interface SessionSetDetail {
 }
 
 // ---------------------------------------------------------------------------
-// Photo (Day 5 - S3 presigned 워크플로우)
+// Photo (Phase 5 - S3 presigned 워크플로우)
 // ---------------------------------------------------------------------------
 
 /** PUT presigned URL 발급 요청. */
@@ -180,7 +180,7 @@ export interface PhotoListResponse {
 }
 
 // ---------------------------------------------------------------------------
-// Exercise Stats (Day 5 - PR / 최근 기록)
+// Exercise Stats (Phase 5 - PR / 최근 기록)
 // ---------------------------------------------------------------------------
 
 export interface TopSet {

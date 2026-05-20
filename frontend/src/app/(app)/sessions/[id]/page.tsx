@@ -157,7 +157,7 @@ export default function SessionDetailPage({ params }: Props) {
         ))}
       </ul>
 
-      {/* Day 5: 인증샷 영역 */}
+      {/* Phase 5: 인증샷 영역 */}
       <PhotoUploader sessionId={sessionId} />
       <div className="rounded-lg border border-zinc-200 bg-white p-4">
         <h2 className="mb-2 text-sm font-semibold text-zinc-900">사진</h2>

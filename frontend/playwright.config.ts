@@ -1,7 +1,7 @@
 /**
  * Playwright 설정.
  *
- * <p>설계: 면접 talking point 대비 + Day 7 E2E 자동화 (workout-tracker).
+ * <p>설계: Phase 7 E2E 자동화 (workout-tracker).
  *
  * <p>핵심 결정:
  * <ul>

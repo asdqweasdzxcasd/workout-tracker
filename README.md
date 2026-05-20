@@ -2,7 +2,7 @@
 
 ![E2E](https://github.com/asdqweasdzxcasd/workout-tracker/actions/workflows/e2e.yml/badge.svg)
 
-운동 세션/세트 기록 + 인증샷 업로드를 다루는 풀스택 MVP. 1주(40시간) 안에 면접 시연용으로 완성.
+운동 세션/세트 기록 + 인증샷 업로드를 다루는 풀스택 MVP. AWS / Vercel / Spring Boot / Next.js 등 운영 스택을 실제로 다뤄보는 개인 학습 프로젝트.
 
 - Backend: Java 17 + Spring Boot 3.3 (REST API)
 - Frontend: Next.js 16 (App Router) + TypeScript + Tailwind
@@ -20,7 +20,7 @@
 | **Frontend (Vercel)** | https://workout-tracker-ten-zeta.vercel.app |
 | Backend API | 비공개 (Vercel BFF → AWS ALB 경유로만 접근) |
 
-> 데모 계정은 면접 시연 직전 별도 안내.
+> 데모 계정은 시연 시 별도 안내. (회원가입 직접 가능)
 
 ## 🏗️ 운영 아키텍처
 
@@ -238,9 +238,9 @@ workout-tracker/
 
 ---
 
-## 7일 일정 (진행 상황)
+## 구현 단계 (Phase)
 
-| Day | 내용 | 상태 |
+| Phase | 내용 | 상태 |
 |---|---|---|
 | 1 | 인프라/뼈대 (스캐폴딩, Flyway, docker-compose) | ✅ |
 | 2 | 인증 + 운동 종류 API | ✅ |

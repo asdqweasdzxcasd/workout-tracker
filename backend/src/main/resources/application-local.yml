@@ -20,7 +20,7 @@ spring:
 # =====================================================
 # JWT 설정
 # - 시크릿은 환경변수 JWT_SECRET 우선, 미지정 시 로컬 더미 사용
-# - 운영(Day 6)에서는 반드시 EC2 환경변수로 주입
+# - 운영(Phase 6)에서는 반드시 EC2 환경변수로 주입
 # =====================================================
 jwt:
   secret: ${JWT_SECRET:dummy-local-secret-at-least-32-characters-long-for-hs256-algorithm-OK}

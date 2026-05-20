@@ -10,7 +10,7 @@ import java.time.LocalDate;
  *
  * <p>출처: docs/design.md 3.5 GET /sessions Response.content[]
  *
- * <p>photoCount 는 Day 3 범위에서는 0 고정 (Day 5 에서 photo 도메인 추가 후 갱신 예정).
+ * <p>photoCount 는 Phase 3 범위에서는 0 고정 (Phase 5 에서 photo 도메인 추가 후 갱신 예정).
  */
 @Schema(description = "세션 목록 항목")
 public record SessionListItemResponse(
