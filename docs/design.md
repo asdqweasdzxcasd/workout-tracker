@@ -525,16 +525,18 @@ export const qk = {
 
 | 상황 | 전략 |
 |---|---|
-| 세션 생성 성공 | queryClient.invalidateQueries({ queryKey: ['sessions'] }) |
-| 세션 삭제 | optimistic update - 목록에서 즉시 제거, 실패 시 롤백 |
-| 인증샷 업로드 | 단계별 mutation 체이닝: presign -> S3 PUT (fetch) -> metadata POST |
-| 로그인 성공 | setQueryData(qk.me, user) 즉시 반영 |
+| 세션 생성 성공 | onSuccess 에서 `invalidateQueries({ queryKey: ['sessions'] })` |
+| 세션 삭제 | onSuccess 에서 invalidate + `removeQueries`(상세 캐시) + 목록 페이지로 navigate |
+| 인증샷 업로드 | 단계별 mutation 체이닝: presign → S3 PUT (fetch) → metadata POST |
+| 로그인 성공 | onSuccess 에서 `setAccessToken` + 다음 경로로 navigate |
+
+> 본 MVP 는 optimistic update (`onMutate` + `setQueryData`) 는 미적용. 단순 폼이라 UX 체감 차이가 적어 후속 과제로 둠.
 
 #### staleTime 정책
 
-- exercises: 1시간 (사실상 정적)
-- sessions: 30초
-- me: 5분
+- exercises (마스터 데이터): 1시간 (`60 * 60 * 1000`, 사실상 정적)
+- sessions (목록/상세): QueryClient 기본 30초 (`providers.tsx`)
+- photos (세션별 갤러리): 10분 (`10 * 60 * 1000`)
 
 ### 4.4 인증 가드 (proxy.ts) - Bearer 방식 확정
 
