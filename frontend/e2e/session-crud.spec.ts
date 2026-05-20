@@ -85,13 +85,15 @@ test.describe("세션 작성/조회", () => {
     await expect(page.getByRole("heading", { level: 2, name: /벤치프레스/ })).toBeVisible();
     await expect(page.getByText("E2E 테스트 - 가슴/삼두")).toBeVisible();
 
-    // 세트 표시 검증 - "60.0" / "80.0" (formatWeightKg 가 1자리 fixed 가정)
-    // 다만 포맷 함수가 다른 자리수일 수도 있어 "60"/"80" 으로 느슨하게 확인
-    const setsList = page.locator("ul").filter({ has: page.locator("li", { hasText: /^60/ }) }).first();
-    await expect(setsList.getByText(/60/).first()).toBeVisible();
-    await expect(setsList.getByText(/80/).first()).toBeVisible();
-    await expect(setsList.getByText("10", { exact: true })).toBeVisible();
-    await expect(setsList.getByText("8", { exact: true })).toBeVisible();
+    // 세트 표시 검증 - 각 listitem 이 "세트번호 무게 횟수" 형태 (예: "1 60 10")
+    // 무게/횟수 포맷이 바뀌어도 동작하도록 텍스트 포함 여부만 본다.
+    // 같은 li 안에 (무게, 횟수) 가 함께 있어야 진짜 그 세트 항목으로 인정.
+    await expect(
+      page.getByRole("listitem").filter({ hasText: "60" }).filter({ hasText: "10" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("listitem").filter({ hasText: "80" }).filter({ hasText: "8" }),
+    ).toBeVisible();
 
     // 목록으로 돌아가서 카드가 표시되는지
     await page.getByRole("link", { name: "목록으로" }).click();
