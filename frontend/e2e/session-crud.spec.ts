@@ -34,20 +34,22 @@ test.describe("세션 작성/조회", () => {
     // Given - 처음에는 빈 상태
     await expect(page.getByText("아직 운동 기록이 없습니다.")).toBeVisible();
 
-    // When - 신규 세션 페이지로 이동
+    // When - /exercises GET 응답을 기다리는 promise 를 navigation 직전에 등록.
+    // 메모 입력 중에 응답이 도착하면 미리 등록된 promise 가 잡아낸다.
+    // (네비게이션 후 등록하면 fetch 가 promise 등록 전에 끝나 missed 될 수 있다.)
+    const exercisesResp = page.waitForResponse(
+      (resp) => resp.url().includes("/exercises") && resp.request().method() === "GET",
+    );
     await newSessionLink(page).first().click();
     await expect(page).toHaveURL(/\/sessions\/new$/);
+    await exercisesResp;
 
     // 메모 입력
     await page.getByLabel("메모").fill("E2E 테스트 - 가슴/삼두");
 
-    // 운동 추가 - /exercises 응답을 기다려 옵션이 채워진 것을 보장
-    const exercisesResp = page.waitForResponse(
-      (resp) => resp.url().includes("/exercises") && resp.request().method() === "GET",
-    );
+    // 운동 추가 - 데이터 이미 도착했으므로 버튼 enabled 상태 보장
     await expect(addExerciseButton(page)).toBeEnabled();
     await addExerciseButton(page).click();
-    await exercisesResp;
 
     // 벤치프레스 선택 - select 옵션을 label 로 찾기
     const select = exerciseSelect(page, 0);
