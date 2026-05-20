@@ -102,7 +102,7 @@
         <mxCell id="sg-web" value="web-sg (EC2)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;fontStyle=1" vertex="1" parent="sg-box">
           <mxGeometry x="380" y="50" width="280" height="110" as="geometry" />
         </mxCell>
-        <mxCell id="sg-web-desc" value="Inbound:&#xa;TCP 8080 ← alb-sg (Source SG ⭐)&#xa;TCP 8081 ← alb-sg&#xa;TCP 22  ← <내 IP>/32 (SSH)&#xa;Outbound: All" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;spacingLeft=10" vertex="1" parent="sg-web">
+        <mxCell id="sg-web-desc" value="Inbound:&#xa;TCP 8080 ← alb-sg (Source SG ⭐)&#xa;TCP 8081 ← alb-sg&#xa;TCP 22  ← &lt;내 IP&gt;/32 (SSH)&#xa;Outbound: All" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;spacingLeft=10" vertex="1" parent="sg-web">
           <mxGeometry x="0" y="25" width="280" height="80" as="geometry" />
         </mxCell>
 
