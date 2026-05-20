@@ -19,6 +19,7 @@
 | 6.3 | EC2 IAM Role 부착, AccessKey 환경변수 제거 | ✅ |
 | 6.4 | ALB + Target Group + Blue/Green 2 컨테이너 + Rolling 배포 스크립트 | ✅ |
 | 6.5 | Vercel 프론트엔드 배포 (BFF 환경변수 연동) | ✅ |
+| 7   | Playwright E2E 12 시나리오 + GitHub Actions CI 자동화 | ✅ |
 
 ---
 
@@ -304,6 +305,119 @@ IAM Role 부착 후:
 | 환경변수 `NEXT_PUBLIC_API_BASE_URL` | `/api/proxy` |
 
 브라우저 → Vercel HTTPS → 서버사이드 fetch → ALB HTTP. **서버사이드 호출은 CORS 무관**, Mixed Content 발생 안 함.
+
+---
+
+## 11. GitHub Actions E2E CI (Phase 7)
+
+### 11.1 워크플로우 구성
+
+| 항목 | 값 |
+|---|---|
+| 파일 | `.github/workflows/e2e.yml` |
+| Runner | `ubuntu-latest` (GitHub-hosted) |
+| 트리거 | `push` to `main`, `pull_request` to `main`, `workflow_dispatch` (수동) |
+| 시간 | 약 3~4 분 (캐시 적중 시) / 8~10 분 (첫 실행) |
+
+### 11.2 실행 흐름
+
+```
+[push or PR]
+   ↓
+[Ubuntu Runner 할당, 깨끗한 VM]
+   ↓
+services: postgres 16 (Docker container 자동 기동, health 대기)
+   ↓
+Step 1. actions/checkout       — 소스 다운로드
+Step 2. setup-java@v4 (JDK17) — Gradle 캐시 활용
+Step 3. setup-node@v4 (Node 20) — npm 캐시 활용
+Step 4. ./gradlew bootRun &    — Spring Boot 백그라운드 실행
+Step 5. curl /actuator/health 폴링 — 최대 5분 대기
+Step 6. npm ci                 — 프론트 의존성 설치
+Step 7. .env.local 동적 생성   — EC2_API_URL=http://localhost:8080
+Step 8. playwright install chromium --with-deps
+Step 9. npm run test:e2e       — 12 시나리오 실행
+Step 10~12. artifact 업로드 (always)
+   ├─ playwright-report (HTML)
+   ├─ playwright-test-results (trace.zip / screenshot / video)
+   └─ backend.log
+   ↓
+[Runner 폐기, 결과 GitHub Actions 탭에 저장]
+```
+
+### 11.3 환경변수
+
+워크플로우 job 레벨에 정의 (GitHub Secrets 불필요 — 모두 로컬 더미값):
+
+```yaml
+env:
+  DB_URL: jdbc:postgresql://localhost:5432/workout_tracker
+  DB_USERNAME: workout
+  DB_PASSWORD: workout_pw_local
+  JWT_SECRET: ci-dummy-secret-at-least-32-characters-long-for-hs256-algorithm-OK
+  SPRING_PROFILES_ACTIVE: local
+  CI: "true"
+```
+
+AWS S3 자격증명은 의도적으로 미주입. 사진 업로드 시나리오는 `test.fixme` 로 스킵 처리되어 CI 에서는 호출되지 않음.
+
+### 11.4 모니터링 / 결과 확인
+
+```bash
+# 최근 실행 목록
+gh run list --workflow=e2e.yml --limit 5
+
+# 진행 중 실행 실시간 watch
+gh run watch <RUN_ID> --exit-status
+
+# 특정 실행 상세 (실패 step 확인)
+gh run view <RUN_ID> --log-failed
+
+# artifact 다운로드 (실패 디버깅)
+gh run download <RUN_ID>
+```
+
+또는 브라우저: `https://github.com/<owner>/<repo>/actions`
+
+### 11.5 실패 시 디버깅 절차
+
+1. **Artifact 다운로드** → `playwright-report.zip` 압축 해제 → `index.html` 열기
+2. 실패한 테스트에서 **Trace** 버튼 → Time-travel DOM snapshot 으로 시점별 상태 확인
+3. `playwright-test-results/<test>/error-context.md` 가 자동 생성 — 페이지 snapshot + Test source + Error details 한 곳에 정리
+4. 백엔드가 원인일 가능성이 있으면 `backend.log` 확인 (Spring Boot 전체 로그)
+
+### 11.6 trace 보는 법
+
+```bash
+cd frontend
+npx playwright show-trace <path/to/trace.zip>
+```
+
+또는 HTML 리포트에서 실패 테스트의 "Trace" 버튼 클릭 → 브라우저에서 즉시 열림.
+
+Trace Viewer 가 보여주는 것:
+- **Actions timeline** — 각 click/fill 시점
+- **DOM snapshot** — 그 시점의 페이지 상태 (이전/이후 비교 가능)
+- **Network** — 요청/응답 헤더와 본문
+- **Console** — 브라우저 콘솔 메시지
+- **Source** — 실패 라인이 강조된 테스트 코드
+
+### 11.7 5 라운드 디버깅 사례 (실제 진행 기록)
+
+| 라운드 | 통과/실패 | 원인 | Fix |
+|---|---|---|---|
+| 1 | 5/11 | 초기 셋업 | 워크플로우 파일 작성 |
+| 2 | 10/11 | (1) `useAuthGuard` hydration race — 정상 로그인 사용자가 /login 으로 일시 튕김 (잠재 prod 버그) (2) Next.js 16 의 `__next-route-announcer__` 와 `getByRole("alert")` strict mode 충돌 | (1) `mounted` 플래그로 client mount 보장 (2) `getByText` 로 변경 |
+| 3 | 10/11 | 셀렉터 정규식 가정 오류 (`^60` 으로 시작) | 셀렉터 단순화 |
+| 4 | 10/11 | 중첩 listitem strict mode (부모 li 가 자식 텍스트 포함) | `hasNot` 으로 leaf li 만 매칭 |
+| 5 | **11/11 ✅** | `waitForResponse` promise 등록이 fetch 시작 후라 응답 missed | promise 를 navigation 이전에 등록 |
+
+### 11.8 Deprecation 알림 (2026-09-16 까지 대응 필요)
+
+Action 들이 Node.js 20 런타임 위에서 동작 중. 2026-09-16 이후 강제 제거. 대응 옵션:
+
+- **Opt-in 즉시**: workflow 의 `env:` 에 `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"` 추가
+- **버전 업그레이드 대기**: `actions/checkout@v5` 등 Node 24 지원 버전 출시 시 교체
 
 ---
 
