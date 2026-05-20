@@ -85,15 +85,14 @@ test.describe("세션 작성/조회", () => {
     await expect(page.getByRole("heading", { level: 2, name: /벤치프레스/ })).toBeVisible();
     await expect(page.getByText("E2E 테스트 - 가슴/삼두")).toBeVisible();
 
-    // 세트 표시 검증 - 각 listitem 이 "세트번호 무게 횟수" 형태 (예: "1 60 10")
-    // 무게/횟수 포맷이 바뀌어도 동작하도록 텍스트 포함 여부만 본다.
-    // 같은 li 안에 (무게, 횟수) 가 함께 있어야 진짜 그 세트 항목으로 인정.
-    await expect(
-      page.getByRole("listitem").filter({ hasText: "60" }).filter({ hasText: "10" }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("listitem").filter({ hasText: "80" }).filter({ hasText: "8" }),
-    ).toBeVisible();
+    // 세트 표시 검증 - 운동 카드 li 안에 세트 li 들이 중첩되어 있어
+    // 부모 li 까지 자식의 텍스트를 포함한다. 자손 listitem 이 없는 leaf li 만 골라
+    // 실제 세트 항목으로 정확히 매칭한다 (예: "1 60 10", "2 80 8").
+    const setItems = page
+      .getByRole("listitem")
+      .filter({ hasNot: page.getByRole("listitem") });
+    await expect(setItems.filter({ hasText: "60" }).filter({ hasText: "10" })).toBeVisible();
+    await expect(setItems.filter({ hasText: "80" }).filter({ hasText: "8" })).toBeVisible();
 
     // 목록으로 돌아가서 카드가 표시되는지
     await page.getByRole("link", { name: "목록으로" }).click();
