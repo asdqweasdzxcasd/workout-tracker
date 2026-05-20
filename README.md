@@ -56,7 +56,7 @@
 | 프로필 | `application-local.yml` | `application-prod.yml` |
 | Spring Boot 실행 | `./gradlew bootRun` (호스트) | Docker 컨테이너 (`deploy/docker-compose.prod.yml`) |
 | DB | `docker-compose.local.yml` 의 PostgreSQL 컨테이너 | AWS RDS PostgreSQL 16 |
-| 이미지 저장소 | (사용 안 함 or 로컬 IAM 키) | AWS S3 (`silee-workout-tracker-photos`) |
+| 이미지 저장소 | (사용 안 함 or 로컬 IAM 키) | AWS S3 (`<S3-BUCKET>`) |
 | 시크릿 | `.env.local` (git 제외) | `deploy/.env` (git 제외) |
 | 자동 재시작 | 수동 | `restart: unless-stopped` |
 

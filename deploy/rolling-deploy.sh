@@ -27,7 +27,9 @@ set -euo pipefail
 # ----------------------------------------------------
 AWS_REGION="${AWS_REGION:-ap-northeast-2}"
 TARGET_GROUP_NAME="${TARGET_GROUP_NAME:-workout-tracker-tg}"
-EC2_INSTANCE_ID="${EC2_INSTANCE_ID:-i-0094f2b5b59d08ece}"
+# 환경변수 EC2_INSTANCE_ID 로 실제 인스턴스 ID 주입 (예: i-0123456789abcdef0).
+# 운영에서는 .env 또는 systemd EnvironmentFile 로 주입하고 절대 코드에 박지 않는다.
+EC2_INSTANCE_ID="${EC2_INSTANCE_ID:?EC2_INSTANCE_ID 환경변수가 필요합니다}"
 HEALTH_CHECK_TIMEOUT_SEC=180   # 컨테이너 부팅 + healthy 까지 최대 대기 시간
 
 # ----------------------------------------------------

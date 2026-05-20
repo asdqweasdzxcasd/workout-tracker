@@ -55,7 +55,8 @@ springdoc:
 aws:
   region: ${AWS_REGION:ap-northeast-2}
   s3:
-    bucket: ${AWS_S3_BUCKET:silee-workout-tracker-photos}
+    # fallback 은 로컬 dev 용 placeholder. 운영은 환경변수 AWS_S3_BUCKET 으로 주입.
+    bucket: ${AWS_S3_BUCKET:workout-tracker-photos-local}
     # PUT presigned URL 유효 시간 (초) - 업로드 직후 사용
     presign-upload-expires-sec: ${AWS_S3_PRESIGN_UPLOAD_EXPIRES_SEC:300}
     # GET presigned URL 유효 시간 (초) - 갤러리 로딩 후 짧은 시간만 유효

@@ -6,7 +6,7 @@
 | Backend | AWS EC2 t3.small (Amazon Linux 2023) — Docker Blue/Green 2 컨테이너 |
 | Load Balancer | AWS ALB (`workout-tracker-alb`) + Target Group (`workout-tracker-tg`) |
 | DB | AWS RDS PostgreSQL 16 |
-| 스토리지 | AWS S3 (`silee-workout-tracker-photos`) |
+| 스토리지 | AWS S3 (`<S3-BUCKET>`) |
 | 인증 | EC2 IAM Role (`WorkoutTrackerEC2Role`) — AccessKey 미사용 |
 | 배포 | git pull → `rolling-deploy.sh` (Blue → Green 순 무중단 교체) |
 
@@ -223,8 +223,8 @@ docker stats workout-tracker-backend
 # 2) RDS 엔드포인트가 .env 의 DB_URL 과 일치하는지
 # 3) 마스터 사용자명/비밀번호 일치하는지
 # 4) DB 존재 여부 (workout_tracker 데이터베이스)
-psql -h workout-tracker-db.cxmy462ieik7.ap-northeast-2.rds.amazonaws.com \
-     -U workout -d workout_tracker
+psql -h <RDS_ENDPOINT> -U workout -d workout_tracker
+# RDS 엔드포인트는 AWS Console → RDS → 인스턴스 → "Endpoint & port" 에서 확인
 ```
 
 ### 7.4 Flyway 실패
@@ -243,7 +243,7 @@ docker exec -it workout-tracker-backend sh
 `software.amazon.awssdk.services.s3.model.S3Exception: Access Denied`:
 
 - `.env` 의 `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` 정확한지
-- IAM 사용자에 `s3:PutObject`, `s3:GetObject` 권한 있는지 (`silee-workout-tracker-photos/*`)
+- IAM 사용자에 `s3:PutObject`, `s3:GetObject` 권한 있는지 (`<S3-BUCKET>/*`)
 - 버킷 region 이 `ap-northeast-2` 인지 (region 불일치 시 SignatureDoesNotMatch)
 
 ### 7.6 컨테이너가 (unhealthy) 로 표시
@@ -265,7 +265,7 @@ EC2 인스턴스에 부착된 IAM Role: `WorkoutTrackerEC2Role`
 
 | 정책 | Action | Resource | 용도 |
 |---|---|---|---|
-| inline `workout-tracker-s3` | `s3:PutObject`, `s3:GetObject` | `arn:aws:s3:::silee-workout-tracker-photos/*` | 인증샷 업로드/다운로드 presigned URL 서명 |
+| inline `workout-tracker-s3` | `s3:PutObject`, `s3:GetObject` | `arn:aws:s3:::<S3-BUCKET>/*` | 인증샷 업로드/다운로드 presigned URL 서명 |
 | inline `workout-tracker-elb-rolling-deploy` | `elasticloadbalancing:DescribeTargetGroups`, `DescribeTargetHealth`, `RegisterTargets`, `DeregisterTargets` | `*` (TG 1개라 좁힐 의미 적음) | Rolling 배포 스크립트가 ALB 조작 |
 
 IAM Role 부착 후:
@@ -280,7 +280,7 @@ IAM Role 부착 후:
 | ALB 이름 | `workout-tracker-alb` |
 | ALB DNS | `workout-tracker-alb-1440516911.ap-northeast-2.elb.amazonaws.com` |
 | Target Group | `workout-tracker-tg` (HTTP/8080, target type=instance) |
-| 등록 대상 | 같은 EC2 인스턴스 (`i-0094f2b5b59d08ece`) 의 8080 / 8081 두 포트 |
+| 등록 대상 | 같은 EC2 인스턴스 (`<EC2_INSTANCE_ID>`) 의 8080 / 8081 두 포트 |
 | 헬스체크 경로 | `/actuator/health` (HTTP 200 기대) |
 | 헬스체크 주기 | 30초, 임계값 healthy/unhealthy 모두 2 |
 
