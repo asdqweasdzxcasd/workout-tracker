@@ -176,7 +176,7 @@ sequenceDiagram
 
 전체 소요: 약 5~7 분. **중간에 ALB 가 한 컨테이너로 모든 트래픽을 라우팅하므로 다운타임 0초.**
 
-> 시연 검증: 다른 터미널에서 `watch -n 1 'curl -s -o /dev/null -w "%{http_code}\n" http://<ALB-DNS>/actuator/health'` 띄워두고 배포 중 200 응답 유지 확인.
+> 수동 검증: 다른 터미널에서 `watch -n 1 'curl -s -o /dev/null -w "%{http_code}\n" http://<ALB-DNS>/actuator/health'` 띄워두고 배포 중 200 응답 유지 확인.
 
 ### 5.2 일괄 재시작 (다운타임 허용 시)
 

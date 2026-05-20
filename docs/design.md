@@ -875,7 +875,7 @@ cors:
 ### 7.6 API 문서화
 - springdoc-openapi-starter-webmvc-ui
 - /swagger-ui/index.html 노출 (운영은 인증 게이팅 권장)
-- DTO에 @Schema 어노테이션으로 예시값 명시 -> Swagger 화면에서 시연 가능
+- DTO에 @Schema 어노테이션으로 예시값 명시 -> Swagger 화면에서 확인 가능
 
 ### 7.7 비밀 관리 결정
 - MVP: EC2 환경변수
@@ -936,21 +936,21 @@ cors:
 7. "React Query를 왜 도입?"
    - 서버 상태(목록/상세)는 캐시/재요청/optimistic update가 필요. useState로 직접 관리하면 stale 데이터 처리 코드가 폭증. invalidateQueries로 일관성 유지.
 
-### 8.3 이 프로젝트로 어필 가능한 것 (요약)
+### 8.3 학습으로 얻은 것 (요약)
 
-- 풀스택 자력 구축 경험: 인프라(RDS/S3/EC2)부터 FE/BE까지 1주 안에
-- AWS 실전: 학습 단계에서 실제로 IAM Role, presigned URL, SG 분리 구현
-- 신기술 빠른 학습: 처음 쓰는 React Query, Playwright, Next.js App Router를 단기간에 운영 가능 수준으로
+- 풀스택 자력 구축 경험: 인프라(RDS/S3/EC2)부터 FE/BE까지 직접 운영 배포
+- AWS 실전: IAM Role, presigned URL, SG 분리, Blue/Green Rolling 배포 직접 구현
+- 신기술 빠른 학습: React Query, Playwright, Next.js App Router를 단기간에 운영 가능 수준으로 익힘
 - 트레이드오프 의식: 오버엔지니어링 회피, 단순함과 정합성의 균형
 
-### 8.4 데모 시나리오 (데모 시연용 3분)
+### 8.4 동작 확인 흐름 (수동 sanity check 용)
 
-1. (10초) Vercel 도메인 접속 -> 로그인 페이지
-2. (30초) 신규 회원가입 -> 자동 로그인 -> /sessions 진입
-3. (60초) 신규 세션 작성: 운동 2개 추가, 각 3세트 입력, 인증샷 업로드(presigned 흐름을 네트워크 탭으로 보여주기)
-4. (30초) 목록 페이지로 돌아와 방금 작성한 세션 확인
-5. (30초) 운동 통계 페이지: PR / 최근 기록
-6. (20초) Swagger UI / Playwright 리포트 / GitHub Actions 배포 로그 보여주기
+1. Vercel 도메인 접속 → 로그인 페이지
+2. 신규 회원가입 → 자동 로그인 → `/sessions` 진입
+3. 신규 세션 작성: 운동 2개 추가, 각 3세트 입력, 인증샷 업로드 (네트워크 탭에서 presigned 흐름 확인)
+4. 목록 페이지에서 방금 작성한 세션 확인
+5. 운동 통계 페이지: PR / 최근 기록
+6. Swagger UI / Playwright 리포트 / GitHub Actions 결과 확인
 
 ---
 

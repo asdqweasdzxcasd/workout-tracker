@@ -13,14 +13,14 @@
 
 ---
 
-## 🌐 라이브 데모
+## 🌐 라이브 사이트 (동작 중인 인스턴스)
 
 | 항목 | URL |
 |---|---|
 | **Frontend (Vercel)** | https://workout-tracker-ten-zeta.vercel.app |
 | Backend API | 비공개 (Vercel BFF → AWS ALB 경유로만 접근) |
 
-> 데모 계정은 시연 시 별도 안내. (회원가입 직접 가능)
+> 회원가입은 누구나 가능. AWS 비용 절감 위해 비활성화될 수 있다.
 
 ## 🏗️ 운영 아키텍처
 
