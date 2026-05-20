@@ -18,7 +18,7 @@
  *   <li>setState 를 useEffect 안에서 직접 호출하지 않아 ESLint rule 충돌 없음.</li>
  * </ul>
  */
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 
 import { getAccessToken } from "./auth-storage";
@@ -43,11 +43,21 @@ export function useAuthGuard(): boolean {
   const router = useRouter();
   const hasToken = useSyncExternalStore(subscribeStorage, getClientSnapshot, getServerSnapshot);
 
+  // hydration race 방지:
+  // useSyncExternalStore 의 getServerSnapshot 이 항상 false 라
+  // 첫 client commit 에서 hasToken=false 가 잠깐 노출되는 순간이 있다.
+  // 이때 useEffect 가 즉시 router.replace("/login") 을 호출하면 정상 로그인된 사용자도
+  // /login 으로 튕길 수 있다. mounted 가 true 가 된 다음 tick 부터만 redirect 한다.
+  const [mounted, setMounted] = useState(false);
   useEffect(() => {
-    if (!hasToken) {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (mounted && !hasToken) {
       router.replace("/login");
     }
-  }, [hasToken, router]);
+  }, [mounted, hasToken, router]);
 
   return hasToken;
 }

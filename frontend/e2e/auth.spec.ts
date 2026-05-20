@@ -56,7 +56,10 @@ test.describe("인증 흐름", () => {
     expect(resp.status()).toBeLessThan(500);
 
     // 에러 메시지가 role=alert 로 표시되어야 한다 (web-first assertion 자동 재시도)
-    await expect(page.getByRole("alert")).toBeVisible();
+    // Next.js 16 이 __next-route-announcer__ 라는 빈 alert div 를 페이지마다 자동 삽입하므로
+    // getByRole("alert") 단독 사용 시 strict mode violation 이 발생한다.
+    // 텍스트 기반 셀렉터로 실제 에러 메시지만 정확히 매칭한다.
+    await expect(page.getByText("이메일 또는 비밀번호가 올바르지 않습니다")).toBeVisible();
 
     // URL 은 여전히 /login (리다이렉트 안 됨)
     await expect(page).toHaveURL(/\/login$/);
