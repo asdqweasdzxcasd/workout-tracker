@@ -1,0 +1,182 @@
+# =====================================================
+# workout-tracker E2E (Playwright) CI
+#
+# 흐름:
+#   1. PostgreSQL 16 service container 기동 (Flyway 가 마이그레이션 + V2 시드 자동 적용)
+#   2. JDK 17 + Node.js 20 설치 (Gradle / npm 캐시 활용)
+#   3. Spring Boot bootRun 을 백그라운드로 띄우고 /actuator/health 응답 대기
+#   4. Playwright Chromium 설치 후 `npm run test:e2e` 실행
+#   5. 실패해도 (always) playwright-report + backend log 를 artifact 로 업로드 → 디버깅
+#
+# 트리거:
+#   - main 브랜치 push
+#   - main 브랜치로의 PR
+#   - 수동 실행 (workflow_dispatch)
+# =====================================================
+name: E2E
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    name: Playwright E2E (Chromium)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    # ----------------------------------------------------
+    # PostgreSQL 16 service container
+    # docker-compose.local.yml 의 설정과 동일하게 맞춤
+    # ----------------------------------------------------
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: workout_tracker
+          POSTGRES_USER: workout
+          POSTGRES_PASSWORD: workout_pw_local
+          TZ: Asia/Seoul
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    # ----------------------------------------------------
+    # 백엔드/프론트 공통 환경변수
+    # ----------------------------------------------------
+    env:
+      DB_URL: jdbc:postgresql://localhost:5432/workout_tracker
+      DB_USERNAME: workout
+      DB_PASSWORD: workout_pw_local
+      JWT_SECRET: ci-dummy-secret-at-least-32-characters-long-for-hs256-algorithm-OK
+      SPRING_PROFILES_ACTIVE: local
+      # Playwright 가 시스템에서 Chromium 자동 탐지
+      CI: "true"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # --------------------------------------------------
+      # JDK + Gradle 캐시
+      # --------------------------------------------------
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+
+      # --------------------------------------------------
+      # Node.js + npm 캐시 (frontend/package-lock.json 기준)
+      # --------------------------------------------------
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # --------------------------------------------------
+      # 백엔드: bootRun 백그라운드 실행
+      # nohup + & 로 띄우고 health 가 200 응답할 때까지 폴링
+      # --------------------------------------------------
+      - name: Start Spring Boot backend (background)
+        working-directory: backend
+        run: |
+          chmod +x gradlew
+          nohup ./gradlew bootRun --no-daemon > ../backend.log 2>&1 &
+          echo $! > ../backend.pid
+          echo "Backend PID: $(cat ../backend.pid)"
+
+      - name: Wait for backend /actuator/health
+        run: |
+          echo "Waiting for backend to become healthy..."
+          for i in $(seq 1 60); do
+            if curl -fs http://localhost:8080/actuator/health > /dev/null 2>&1; then
+              echo "✅ Backend healthy after ${i} attempts ($(($i * 5))s)"
+              curl -s http://localhost:8080/actuator/health
+              exit 0
+            fi
+            echo "  attempt $i/60 - not ready yet"
+            sleep 5
+          done
+          echo "❌ Backend did not become healthy within 5 minutes"
+          echo "===== backend.log (last 200 lines) ====="
+          tail -200 backend.log
+          exit 1
+
+      # --------------------------------------------------
+      # 프론트엔드: 의존성 + Playwright 브라우저 설치
+      # --------------------------------------------------
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Create frontend .env.local for BFF
+        working-directory: frontend
+        run: |
+          cat > .env.local <<EOF
+          NEXT_PUBLIC_API_BASE_URL=/api/proxy
+          EC2_API_URL=http://localhost:8080
+          EOF
+          echo "Generated .env.local:"
+          cat .env.local
+
+      - name: Install Playwright browsers (Chromium + deps)
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      # --------------------------------------------------
+      # E2E 실행
+      # playwright.config.ts 의 webServer 가 Next.js dev 서버를 자동 기동
+      # --------------------------------------------------
+      - name: Run Playwright tests
+        working-directory: frontend
+        run: npm run test:e2e
+
+      # --------------------------------------------------
+      # 결과 artifact: HTML report (실패 디버깅용)
+      # --------------------------------------------------
+      - name: Upload Playwright HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 7
+
+      - name: Upload Playwright trace/screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: frontend/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload backend log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-log
+          path: backend.log
+          retention-days: 7
+          if-no-files-found: ignore
+
+      # --------------------------------------------------
+      # 정리: 백엔드 종료 (job 정리 단계라 사실 GH runner 자동 정리됨)
+      # --------------------------------------------------
+      - name: Stop backend
+        if: always()
+        run: |
+          if [ -f backend.pid ]; then
+            kill $(cat backend.pid) 2>/dev/null || true
+          fi

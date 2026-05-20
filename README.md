@@ -1,13 +1,51 @@
 # workout-tracker
 
-운동 세션/세트 기록 + 인증샷 업로드를 다루는 풀스택 MVP. 1주(40시간) 안에 면접 시연용으로 완성하는 것이 목표.
+![E2E](https://github.com/asdqweasdzxcasd/workout-tracker/actions/workflows/e2e.yml/badge.svg)
+
+운동 세션/세트 기록 + 인증샷 업로드를 다루는 풀스택 MVP. 1주(40시간) 안에 면접 시연용으로 완성.
 
 - Backend: Java 17 + Spring Boot 3.3 (REST API)
 - Frontend: Next.js 16 (App Router) + TypeScript + Tailwind
-- DB: PostgreSQL 16 (로컬은 docker-compose, 운영은 RDS 예정)
-- 배포 예정: Vercel(FE BFF) + EC2 Docker(BE) + RDS + S3
+- DB: PostgreSQL 16 (로컬은 docker-compose, 운영은 AWS RDS)
+- 배포: **Vercel(FE BFF) + AWS EC2 Docker(BE Blue/Green) + ALB + RDS + S3**
 
 상세 설계, 일정, 트레이드오프는 [`docs/design.md`](./docs/design.md)를 참고.
+
+---
+
+## 🌐 라이브 데모
+
+| 항목 | URL |
+|---|---|
+| **Frontend (Vercel)** | https://workout-tracker-ten-zeta.vercel.app |
+| Backend API | 비공개 (Vercel BFF → AWS ALB 경유로만 접근) |
+
+> 데모 계정은 면접 시연 직전 별도 안내.
+
+## 🏗️ 운영 아키텍처
+
+```
+[Browser]
+   │ HTTPS (Vercel 자동 발급)
+   ▼
+[Vercel: Next.js 16]
+   ├─ App Router pages (SSR/CSR)
+   └─ /api/proxy/* (BFF) ── 서버사이드 fetch (HTTP)
+                              │
+                              ▼
+                  [AWS ALB] workout-tracker-tg
+                      ├─→ EC2 Blue  (8080) Spring Boot ─┐
+                      └─→ EC2 Green (8081) Spring Boot ─┤
+                                                        ├─→ [RDS PostgreSQL 16]
+                                                        └─→ [S3] presigned URL
+                                                            (EC2 IAM Role)
+```
+
+핵심 운영 특성:
+- **무중단 배포**: Blue/Green 2 컨테이너 + ALB Target Group + Rolling 스크립트 (`deploy/rolling-deploy.sh`)
+- **시크릿 제로**: EC2 → S3 는 IAM Role (AccessKey 미사용), `.env` 에 DB/JWT 만
+- **Mixed Content 회피**: 브라우저는 same-origin HTTPS, BFF 가 서버사이드 HTTP fetch
+- **Backend 주소 은닉**: ALB DNS 는 Vercel 환경변수에만 존재, 클라이언트에 미노출
 
 ---
 
@@ -108,19 +146,19 @@ workout-tracker/
 
 ---
 
-## 7일 일정 (요약)
+## 7일 일정 (진행 상황)
 
-| Day | 내용 |
-|---|---|
-| 1 | 인프라/뼈대 (스캐폴딩, Flyway, docker-compose) |
-| 2 | 인증 + 운동 종류 API |
-| 3 | 세션 도메인 (CRUD, 단일 트랜잭션) |
-| 4 | Frontend 인증/목록 + BFF 프록시 |
-| 5 | PR/통계 + S3 인증샷 (presigned URL) |
-| 6 | AWS 배포 (EC2/RDS/S3 + GitHub Actions) |
-| 7 | E2E (Playwright) + 문서화 |
+| Day | 내용 | 상태 |
+|---|---|---|
+| 1 | 인프라/뼈대 (스캐폴딩, Flyway, docker-compose) | ✅ |
+| 2 | 인증 + 운동 종류 API | ✅ |
+| 3 | 세션 도메인 (CRUD, 단일 트랜잭션) | ✅ |
+| 4 | Frontend 인증/목록 + BFF 프록시 | ✅ |
+| 5 | PR/통계 + S3 인증샷 (presigned URL) | ✅ |
+| 6 | AWS 배포 (EC2/RDS/S3 + ALB Blue/Green + Vercel) | ✅ |
+| 7 | E2E (Playwright) + 문서화 | ⏳ |
 
-세부 내용은 [`docs/design.md`](./docs/design.md) 6장 참고.
+세부 내용은 [`docs/design.md`](./docs/design.md) 6장 참고. 운영 배포 상세는 [`deploy/DEPLOY.md`](./deploy/DEPLOY.md).
 
 ---
 
