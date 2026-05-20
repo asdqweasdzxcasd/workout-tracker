@@ -392,8 +392,47 @@ INSERT INTO exercises (code, name_ko, name_en, body_part, category) VALUES
 - size 10MB 이내, content-type whitelist 검증
 
 #### POST /sessions/{id}/photos
-업로드 완료 후 클라이언트가 호출 -> DB에 메타데이터 INSERT.  
+업로드 완료 후 클라이언트가 호출 -> DB에 메타데이터 INSERT.
 HEAD S3 호출로 실제 업로드 검증(선택, MVP에선 생략 가능).
+
+#### S3 Presigned URL 전체 흐름
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Browser
+    participant BFF as Vercel BFF
+    participant Backend as Spring Boot
+    participant IMDS as EC2 IMDSv2
+    participant S3 as AWS S3
+
+    rect rgb(240, 240, 255)
+        Note over Browser,S3: ① PUT URL 발급
+        Browser->>BFF: POST /api/proxy/sessions/{id}/photos/presign<br/>{contentType, sizeBytes}
+        BFF->>Backend: forward
+        Backend->>IMDS: 자격증명 조회<br/>(EC2 IAM Role, AccessKey 없음)
+        IMDS-->>Backend: 임시 자격증명
+        Backend->>Backend: S3Presigner.presignPutObject<br/>(s3Key, contentType, 5분 만료)
+        Backend-->>Browser: 200 {uploadUrl, s3Key, expiresInSec=300}
+    end
+
+    rect rgb(240, 255, 240)
+        Note over Browser,S3: ② 브라우저가 S3 에 직접 PUT — BFF/백엔드 우회
+        Browser->>S3: PUT uploadUrl<br/>Body: 이미지 바이트
+        S3-->>Browser: 200 OK
+    end
+
+    rect rgb(255, 245, 220)
+        Note over Browser,S3: ③ 메타데이터 등록
+        Browser->>BFF: POST /api/proxy/sessions/{id}/photos<br/>{s3Key, contentType, sizeBytes}
+        BFF->>Backend: forward
+        Backend->>Backend: DB INSERT session_photos
+        Backend->>Backend: presignGetObject (15분 만료)
+        Backend-->>Browser: 201 {id, downloadUrl}
+    end
+
+    Note over Browser,S3: 큰 파일 바이트가 백엔드를 거치지 않아 메모리/대역폭 효율
+```
 
 ### 3.6 페이징 / 필터 규약
 
@@ -521,6 +560,48 @@ export const qk = {
 ### 4.4 인증 가드 (proxy.ts) - Bearer 방식 확정
 
 > Next.js 16 에서 `middleware` 파일 컨벤션이 `proxy` 로 rename. 본 문서는 16 기준으로 `proxy.ts` 표기.
+
+#### JWT 인증 전체 흐름
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Browser
+    participant BFF as Vercel BFF<br/>(/api/proxy/*)
+    participant Backend as Spring Boot
+    participant DB as PostgreSQL
+
+    rect rgb(240, 240, 255)
+        Note over Browser,DB: ① 회원가입 + 자동 로그인
+        Browser->>BFF: POST /api/proxy/auth/signup<br/>{email, password, nickname}
+        BFF->>Backend: POST /api/v1/auth/signup
+        Backend->>DB: INSERT users<br/>(password_hash = BCrypt(password))
+        Backend-->>Browser: 201 {userId}
+
+        Browser->>BFF: POST /api/proxy/auth/login
+        BFF->>Backend: POST /api/v1/auth/login
+        Backend->>DB: SELECT users WHERE email=?
+        Backend->>Backend: BCrypt.matches() + JWT 생성<br/>(HS256, exp=1h)
+        Backend-->>Browser: 200 {accessToken, expiresIn}
+        Browser->>Browser: localStorage.setItem("access_token", ...)
+    end
+
+    rect rgb(240, 255, 240)
+        Note over Browser,DB: ② 보호 API 호출 (axios interceptor 가 자동 첨부)
+        Browser->>BFF: GET /api/proxy/sessions<br/>Authorization: Bearer ...
+        BFF->>Backend: GET /api/v1/sessions (헤더 forward)
+        Backend->>Backend: JwtAuthenticationFilter 검증
+        Backend->>DB: SELECT WHERE user_id=? (보유자 격리)
+        Backend-->>Browser: 200 {sessions}
+    end
+
+    rect rgb(255, 240, 240)
+        Note over Browser,DB: ③ 토큰 만료 (1h 후)
+        Browser->>BFF: GET /api/proxy/...
+        Backend-->>Browser: 401 Unauthorized
+        Browser->>Browser: axios response interceptor 발동<br/>clearAccessToken() + window.location = /login
+    end
+```
 
 ```ts
 // 로직 요약

@@ -24,21 +24,43 @@
 
 ## 🏗️ 운영 아키텍처
 
-```
-[Browser]
-   │ HTTPS (Vercel 자동 발급)
-   ▼
-[Vercel: Next.js 16]
-   ├─ App Router pages (SSR/CSR)
-   └─ /api/proxy/* (BFF) ── 서버사이드 fetch (HTTP)
-                              │
-                              ▼
-                  [AWS ALB] workout-tracker-tg
-                      ├─→ EC2 Blue  (8080) Spring Boot ─┐
-                      └─→ EC2 Green (8081) Spring Boot ─┤
-                                                        ├─→ [RDS PostgreSQL 16]
-                                                        └─→ [S3] presigned URL
-                                                            (EC2 IAM Role)
+```mermaid
+flowchart TB
+    User([👤 User Browser])
+
+    subgraph Vercel["☁️ Vercel (Next.js 16)"]
+        Pages["App Router Pages<br/>SSR + Client Components"]
+        BFF["/api/proxy/*<br/>(BFF, 서버사이드 fetch)"]
+        Pages --> BFF
+    end
+
+    subgraph AWS["☁️ AWS ap-northeast-2"]
+        ALB["Application Load Balancer<br/>workout-tracker-alb"]
+
+        subgraph EC2["EC2 t3.small"]
+            Blue["🟦 Blue :8080<br/>Spring Boot"]
+            Green["🟩 Green :8081<br/>Spring Boot"]
+        end
+
+        RDS[("🗄️ RDS<br/>PostgreSQL 16")]
+        S3[("📷 S3<br/>인증샷")]
+        IAM(["🔑 IAM Role<br/>WorkoutTrackerEC2Role"])
+    end
+
+    User -->|HTTPS| Pages
+    BFF -->|HTTP| ALB
+    ALB --> Blue
+    ALB --> Green
+    Blue --> RDS
+    Green --> RDS
+    Blue -.->|presigned URL| S3
+    Green -.->|presigned URL| S3
+    IAM -.->|IMDSv2 자격증명| EC2
+
+    classDef vercel fill:#000,stroke:#fff,color:#fff
+    classDef aws fill:#FF9900,stroke:#232F3E,color:#fff
+    class Vercel vercel
+    class AWS aws
 ```
 
 핵심 운영 특성:
@@ -46,6 +68,66 @@
 - **시크릿 제로**: EC2 → S3 는 IAM Role (AccessKey 미사용), `.env` 에 DB/JWT 만
 - **Mixed Content 회피**: 브라우저는 same-origin HTTPS, BFF 가 서버사이드 HTTP fetch
 - **Backend 주소 은닉**: ALB DNS 는 Vercel 환경변수에만 존재, 클라이언트에 미노출
+
+## 🗄️ 데이터 모델
+
+```mermaid
+erDiagram
+    users ||--o{ workout_sessions : "1:N"
+    users ||--o{ session_photos : "1:N"
+    workout_sessions ||--o{ session_exercises : "1:N"
+    workout_sessions ||--o{ session_photos : "1:N"
+    session_exercises ||--o{ exercise_sets : "1:N"
+    exercises ||--o{ session_exercises : "마스터 데이터"
+
+    users {
+        BIGSERIAL id PK
+        VARCHAR email UK
+        VARCHAR password_hash
+        VARCHAR nickname
+        TIMESTAMPTZ created_at
+    }
+    exercises {
+        BIGSERIAL id PK
+        VARCHAR code UK
+        VARCHAR name_ko
+        VARCHAR name_en
+        VARCHAR body_part "CHEST/BACK/LEG/SHOULDER/ARM/CORE"
+        VARCHAR category "COMPOUND/ISOLATION"
+        BOOLEAN is_active
+    }
+    workout_sessions {
+        BIGSERIAL id PK
+        BIGINT user_id FK
+        DATE performed_on
+        VARCHAR memo
+        TIMESTAMPTZ created_at
+    }
+    session_exercises {
+        BIGSERIAL id PK
+        BIGINT session_id FK
+        BIGINT exercise_id FK
+        INT order_no
+    }
+    exercise_sets {
+        BIGSERIAL id PK
+        BIGINT session_exercise_id FK
+        INT set_no
+        NUMERIC weight_kg
+        INT reps
+    }
+    session_photos {
+        BIGSERIAL id PK
+        BIGINT session_id FK
+        BIGINT user_id FK
+        VARCHAR s3_key
+        BIGINT size_bytes
+    }
+```
+
+- `ON DELETE CASCADE` 로 user/session 삭제 시 하위 데이터 자동 정리
+- exercises 는 마스터 데이터 (12종 시드, V2 마이그레이션)
+- exercise_sets 는 (session_exercise_id, set_no) 유니크 → 같은 운동 내 세트 번호 중복 방지
 
 ---
 

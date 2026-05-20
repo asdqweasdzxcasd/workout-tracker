@@ -128,6 +128,42 @@ cd ~/workout-tracker/deploy
 ./rolling-deploy.sh
 ```
 
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Dev as 개발자
+    participant Script as rolling-deploy.sh
+    participant ALB
+    participant Blue as 🟦 Blue (8080)
+    participant Green as 🟩 Green (8081)
+
+    Dev->>Script: ./rolling-deploy.sh
+    Note over ALB,Green: 평상시 Blue+Green 50/50
+
+    rect rgb(230, 240, 255)
+        Note over Script,Green: Phase 1 — Blue 교체
+        Script->>ALB: deregister Blue
+        Note over ALB,Green: Green 100% 트래픽
+        Script->>Script: drain 30s (in-flight 처리)
+        Script->>Blue: docker compose up<br/>--force-recreate --build
+        Blue-->>Script: /actuator/health 200
+        Script->>ALB: register Blue
+        Note over Blue,Green: 양쪽 50/50 (잠시 v1+v2 mixed)
+    end
+
+    rect rgb(230, 255, 230)
+        Note over Script,Green: Phase 2 — Green 교체 (동일 절차)
+        Script->>ALB: deregister Green
+        Note over ALB,Blue: Blue 100% 트래픽
+        Script->>Script: drain 30s
+        Script->>Green: docker compose up<br/>--force-recreate --build
+        Green-->>Script: /actuator/health 200
+        Script->>ALB: register Green
+    end
+
+    Note over Blue,Green: ✅ 배포 완료 — 양쪽 v2, 다운타임 0초
+```
+
 자동 실행 흐름:
 
 1. `git pull` (최신 코드)
@@ -332,28 +368,39 @@ IAM Role 부착 후:
 
 ### 11.2 실행 흐름
 
-```
-[push or PR]
-   ↓
-[Ubuntu Runner 할당, 깨끗한 VM]
-   ↓
-services: postgres 16 (Docker container 자동 기동, health 대기)
-   ↓
-Step 1. actions/checkout       — 소스 다운로드
-Step 2. setup-java@v4 (JDK17) — Gradle 캐시 활용
-Step 3. setup-node@v4 (Node 20) — npm 캐시 활용
-Step 4. ./gradlew bootRun &    — Spring Boot 백그라운드 실행
-Step 5. curl /actuator/health 폴링 — 최대 5분 대기
-Step 6. npm ci                 — 프론트 의존성 설치
-Step 7. .env.local 동적 생성   — EC2_API_URL=http://localhost:8080
-Step 8. playwright install chromium --with-deps
-Step 9. npm run test:e2e       — 11 시나리오 실행 (S3 업로드 1건은 `test.fixme` 스킵)
-Step 10~12. artifact 업로드 (always)
-   ├─ playwright-report (HTML)
-   ├─ playwright-test-results (trace.zip / screenshot / video)
-   └─ backend.log
-   ↓
-[Runner 폐기, 결과 GitHub Actions 탭에 저장]
+```mermaid
+flowchart TB
+    Push([📌 git push to main])
+    Trigger[GitHub Actions<br/>e2e.yml 감지]
+
+    Push --> Trigger --> Runner
+
+    subgraph Runner["🖥️ Ubuntu Runner (깨끗한 VM)"]
+        direction TB
+
+        subgraph Services["services container"]
+            PG[("PostgreSQL 16")]
+        end
+
+        S1[Checkout] --> S2[Setup JDK 17<br/>+ Gradle 캐시]
+        S2 --> S3[Setup Node 20<br/>+ npm 캐시]
+        S3 --> S4[bootRun &<br/>백그라운드 실행]
+        S4 --> S5{"/actuator/health<br/>200?"}
+        S5 -->|polling 최대 5분| S5
+        S5 -->|✅| S6[npm ci]
+        S6 --> S7[.env.local 동적 생성<br/>EC2_API_URL=localhost:8080]
+        S7 --> S8[Playwright Chromium 설치]
+        S8 --> S9[npm run test:e2e<br/>11 시나리오]
+        S4 -.JDBC.-> PG
+    end
+
+    Runner --> Outcome{통과?}
+    Outcome -->|✅| Green([🟢 뱃지 + README 갱신])
+    Outcome -->|❌| Artifact[Artifacts 업로드 always]
+
+    Artifact --> A1[playwright-report.zip<br/>HTML 리포트]
+    Artifact --> A2[playwright-test-results.zip<br/>trace.zip + 스크린샷 + 비디오]
+    Artifact --> A3[backend.log<br/>Spring Boot 전체 로그]
 ```
 
 ### 11.3 환경변수
@@ -415,6 +462,22 @@ Trace Viewer 가 보여주는 것:
 
 ### 11.7 5 라운드 디버깅 사례 (실제 진행 기록)
 
+```mermaid
+timeline
+    title E2E 디버깅 5 라운드 진화
+    Round 1 — 5/11  : 초기 워크플로우 셋업
+                    : PostgreSQL + JDK17 + Node20 + bootRun + Playwright
+    Round 2 — 10/11 : ★ useAuthGuard hydration race (production 잠재 버그 발견!)
+                    : Next.js 16 __next-route-announcer__ 와 strict mode 충돌
+                    : mounted 플래그 + 텍스트 셀렉터로 수정
+    Round 3 — 10/11 : 셀렉터 정규식 가정 오류 (^60 으로 시작 X)
+                    : listitem 텍스트 패턴 단순화
+    Round 4 — 10/11 : 중첩 listitem strict mode (부모 li 가 자식 텍스트 포함)
+                    : hasNot 으로 leaf li 만 매칭
+    Round 5 — 11/11 ✅ : waitForResponse race window
+                       : promise 등록을 navigation 이전으로 이동
+```
+
 | 라운드 | 통과/실패 | 원인 | Fix |
 |---|---|---|---|
 | 1 | 5/11 | 초기 셋업 | 워크플로우 파일 작성 |
@@ -422,6 +485,40 @@ Trace Viewer 가 보여주는 것:
 | 3 | 10/11 | 셀렉터 정규식 가정 오류 (`^60` 으로 시작) | 셀렉터 단순화 |
 | 4 | 10/11 | 중첩 listitem strict mode (부모 li 가 자식 텍스트 포함) | `hasNot` 으로 leaf li 만 매칭 |
 | 5 | **11/11 ✅** | `waitForResponse` promise 등록이 fetch 시작 후라 응답 missed | promise 를 navigation 이전에 등록 |
+
+#### Round 2 핵심: hydration race (production 잠재 버그)
+
+E2E 가 노출한 진짜 prod 버그. `useSyncExternalStore` 의 `getServerSnapshot` 이 항상 false 라 hydration 첫 commit 에서 정상 로그인 사용자도 일시적으로 /login 으로 튕길 수 있는 race:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Server as SSR
+    participant Browser
+    participant Store as useSyncExternalStore
+    participant Effect as useEffect
+    participant Router
+
+    Server->>Browser: HTML 응답<br/>(getServerSnapshot → hasToken=false)
+    Browser->>Browser: React hydration 시작
+
+    rect rgb(255, 230, 230)
+        Note over Browser,Router: ⚠️ Race — useEffect commit 순서 결정적이지 않음
+        Effect->>Effect: 첫 commit (hasToken=false 라고 판단)
+        Effect->>Router: router.replace("/login") ⚡
+        Store->>Store: getClientSnapshot → hasToken=true (localStorage)
+        Note over Store: 너무 늦음, 이미 navigate 시작
+    end
+
+    Note over Browser,Router: 사용자는 정상 로그인인데 /login 으로 튕김
+
+    rect rgb(220, 250, 220)
+        Note over Browser,Router: ✅ Fix — mounted 플래그
+        Effect->>Effect: 첫 commit: setMounted(true)
+        Effect->>Effect: 다음 commit: (mounted=true, hasToken=true)
+        Note over Effect: 조건 (mounted && !hasToken) 불충족 → redirect 안 함
+    end
+```
 
 ### 11.8 Deprecation 알림 (2026-09-16 까지 대응 필요)
 

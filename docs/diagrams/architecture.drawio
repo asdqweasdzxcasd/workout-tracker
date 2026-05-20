@@ -1,0 +1,136 @@
+<mxfile host="app.diagrams.net" agent="workout-tracker" version="24.7.17">
+  <diagram name="workout-tracker 운영 아키텍처" id="workout-tracker-arch">
+    <mxGraphModel dx="1422" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- 사용자 -->
+        <mxCell id="user" value="👤 User Browser" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="40" y="380" width="160" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Vercel 박스 -->
+        <mxCell id="vercel" value="☁️ Vercel (Next.js 16)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#ffffff;fontColor=#ffffff;fontSize=14;fontStyle=1;verticalAlign=top;align=left;spacingLeft=10;spacingTop=10" vertex="1" parent="1">
+          <mxGeometry x="260" y="320" width="280" height="200" as="geometry" />
+        </mxCell>
+        <mxCell id="pages" value="App Router Pages&#xa;(SSR + Client Components)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=11" vertex="1" parent="vercel">
+          <mxGeometry x="20" y="50" width="240" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="bff" value="/api/proxy/*&#xa;(BFF, 서버사이드 fetch)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11" vertex="1" parent="vercel">
+          <mxGeometry x="20" y="125" width="240" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- AWS 박스 -->
+        <mxCell id="aws" value="☁️ AWS — ap-northeast-2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=14;fontStyle=1;verticalAlign=top;align=left;spacingLeft=10;spacingTop=10" vertex="1" parent="1">
+          <mxGeometry x="640" y="80" width="880" height="720" as="geometry" />
+        </mxCell>
+
+        <!-- ALB -->
+        <mxCell id="alb" value="Application Load Balancer&#xa;(workout-tracker-alb)&#xa;Target Group: HTTP/8080" style="shape=mxgraph.aws4.application_load_balancer;sketch=0;points=[[0,0.5],[1,0.5],[0.5,0],[0.5,1]];outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=11;fillColor=#E7157B;strokeColor=#ffffff;verticalLabelPosition=bottom;verticalAlign=top;align=center;" vertex="1" parent="1">
+          <mxGeometry x="700" y="350" width="78" height="78" as="geometry" />
+        </mxCell>
+
+        <!-- EC2 박스 -->
+        <mxCell id="ec2" value="EC2 t3.small (Amazon Linux 2023)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;fontStyle=1;verticalAlign=top;align=left;spacingLeft=10;spacingTop=10" vertex="1" parent="1">
+          <mxGeometry x="880" y="200" width="360" height="280" as="geometry" />
+        </mxCell>
+        <mxCell id="blue" value="🟦 Blue Container :8080&#xa;Spring Boot 3.3 (Java 17)&#xa;memlimit 768MB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11" vertex="1" parent="ec2">
+          <mxGeometry x="20" y="50" width="320" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="green" value="🟩 Green Container :8081&#xa;Spring Boot 3.3 (Java 17)&#xa;memlimit 768MB" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11" vertex="1" parent="ec2">
+          <mxGeometry x="20" y="140" width="320" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="iam-note" value="IAM Role: WorkoutTrackerEC2Role&#xa;(IMDSv2 → S3 + ELB 임시 자격증명)" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;fontStyle=2;fontColor=#666666" vertex="1" parent="ec2">
+          <mxGeometry x="20" y="230" width="320" height="35" as="geometry" />
+        </mxCell>
+
+        <!-- RDS -->
+        <mxCell id="rds" value="RDS PostgreSQL 16&#xa;(db.t4g.micro)&#xa;workout_tracker" style="shape=mxgraph.aws4.rds;sketch=0;points=[[0,0.5],[1,0.5],[0.5,0],[0.5,1]];outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=11;fillColor=#3334B9;strokeColor=#ffffff;verticalLabelPosition=bottom;verticalAlign=top;align=center;" vertex="1" parent="1">
+          <mxGeometry x="900" y="560" width="78" height="78" as="geometry" />
+        </mxCell>
+
+        <!-- S3 -->
+        <mxCell id="s3" value="S3 Bucket&#xa;인증샷 (private)&#xa;CORS: Vercel 도메인 허용" style="shape=mxgraph.aws4.s3;sketch=0;points=[[0,0.5],[1,0.5],[0.5,0],[0.5,1]];outlineConnect=0;gradientColor=none;html=1;whiteSpace=wrap;fontSize=11;fillColor=#7AA116;strokeColor=#ffffff;verticalLabelPosition=bottom;verticalAlign=top;align=center;" vertex="1" parent="1">
+          <mxGeometry x="1180" y="560" width="78" height="78" as="geometry" />
+        </mxCell>
+
+        <!-- 화살표들 -->
+        <!-- User -> Vercel Pages -->
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeWidth=2;endArrow=block;endFill=1;" edge="1" parent="1" source="user" target="vercel">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e1-label" value="HTTPS&#xa;(Vercel 자동 발급)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;fontStyle=1;labelBackgroundColor=#ffffff" connectable="0" vertex="1" parent="e1">
+          <mxGeometry x="0" relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- BFF -> ALB -->
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;" edge="1" parent="1" source="bff" target="alb">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2-label" value="HTTP&#xa;(서버사이드 fetch)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;fontStyle=1;labelBackgroundColor=#ffffff" connectable="0" vertex="1" parent="e2">
+          <mxGeometry x="0" relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ALB -> Blue -->
+        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;strokeColor=#6c8ebf" edge="1" parent="1" source="alb" target="blue">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- ALB -> Green -->
+        <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;strokeColor=#82b366" edge="1" parent="1" source="alb" target="green">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- EC2 -> RDS -->
+        <mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;" edge="1" parent="1" source="ec2" target="rds">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5-label" value="JDBC&#xa;(SG: web-sg only)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;labelBackgroundColor=#ffffff" connectable="0" vertex="1" parent="e5">
+          <mxGeometry x="0" relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- EC2 -> S3 -->
+        <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;dashed=1" edge="1" parent="1" source="ec2" target="s3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6-label" value="presigned URL 서명&#xa;(IAM Role)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;labelBackgroundColor=#ffffff" connectable="0" vertex="1" parent="e6">
+          <mxGeometry x="0" relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Browser -> S3 (presigned PUT, 우회) -->
+        <mxCell id="e7" style="edgeStyle=none;curved=1;html=1;strokeWidth=2;endArrow=block;endFill=1;dashed=1;strokeColor=#9673a6" edge="1" parent="1" source="user" target="s3">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="120" y="720" />
+              <mxPoint x="1219" y="720" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e7-label" value="presigned PUT 직접 업로드 (이미지 바이트, BFF 우회)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontSize=10;fontStyle=1;labelBackgroundColor=#ffffff;fontColor=#9673a6" connectable="0" vertex="1" parent="e7">
+          <mxGeometry x="0" relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- 범례 -->
+        <mxCell id="legend" value="범례" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=11;fontStyle=1;verticalAlign=top;align=left;spacingLeft=10;spacingTop=5" vertex="1" parent="1">
+          <mxGeometry x="40" y="600" width="280" height="160" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-1" value="━━━ 실선: 요청/응답 경로" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11" vertex="1" parent="legend">
+          <mxGeometry x="10" y="30" width="260" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-2" value="┄┄┄ 점선: presigned URL 활용 (대용량)" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11" vertex="1" parent="legend">
+          <mxGeometry x="10" y="55" width="260" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-3" value="🟦 Blue / 🟩 Green: Rolling 무중단 배포" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11" vertex="1" parent="legend">
+          <mxGeometry x="10" y="80" width="260" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-4" value="모든 시크릿: .env / IAM Role (코드 X)" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11" vertex="1" parent="legend">
+          <mxGeometry x="10" y="105" width="260" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-5" value="Mixed Content 회피: BFF 가 HTTP forward" style="text;html=1;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11" vertex="1" parent="legend">
+          <mxGeometry x="10" y="130" width="260" height="20" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
