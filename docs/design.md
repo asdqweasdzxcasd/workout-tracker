@@ -867,10 +867,11 @@ cors:
 - 다만 /auth/login에 한해 IP당 분당 5회는 Bucket4j 인메모리로 가능 (Could)
 
 ### 7.5 로깅
-- Spring 기본 logback + JSON 인코더 (logstash-logback-encoder)
-- 요청별 traceId (UUID) MDC 주입, 응답 헤더 X-Trace-Id로 노출
+- Spring Boot 기본 logback (텍스트 포맷)
+- 에러 응답에 8자 짧은 UUID `traceId` 를 즉석 부여하여 로그-응답 대조 가능
 - 에러 로깅: WARN(클라이언트 에러), ERROR(서버 에러), 비밀/토큰 로깅 금지
-- 운영은 EC2 docker logs + journalctl. MVP에선 CloudWatch 연동 제외
+- 운영은 `docker logs` 로 직접 확인. CloudWatch 연동은 제외
+- 후속 과제로 둔 것: 요청별 일관 traceId MDC 주입 + 응답 헤더 노출, JSON 구조화 로그 (logstash-logback-encoder), CloudWatch / Loki 같은 중앙 로그 수집
 
 ### 7.6 API 문서화
 - springdoc-openapi-starter-webmvc-ui
@@ -898,7 +899,7 @@ cors:
 |---|---|
 | Java 17 + Spring Boot | 백엔드 전체 |
 | TypeScript + React + Next.js 16 | 프론트 전체 |
-| React Query | 서버 상태/캐시/optimistic update |
+| React Query | 서버 상태 캐시 + invalidateQueries 기반 refetch (optimistic update 는 미적용) |
 | Playwright | E2E 시나리오 11개 + GitHub Actions CI |
 | Vercel | FE 배포 (BFF 환경변수 연동) |
 | Docker | 멀티스테이지 Dockerfile + docker-compose |
@@ -934,7 +935,7 @@ cors:
    - (user_id, performed_on DESC, id DESC) 복합 인덱스로 "내 기록 날짜순 페이징" 1회 인덱스 스캔으로 처리. id가 tiebreaker라 키셋 페이징 확장 가능.
 
 7. "React Query를 왜 도입?"
-   - 서버 상태(목록/상세)는 캐시/재요청/optimistic update가 필요. useState로 직접 관리하면 stale 데이터 처리 코드가 폭증. invalidateQueries로 일관성 유지.
+   - 서버 상태(목록/상세)는 캐시/재요청 일관성 처리가 필요. useState로 직접 관리하면 stale 데이터 / 중복 fetch / 로딩 상태 분기가 폭증. 본 MVP 는 invalidateQueries 기반 자동 refetch 만 적용 (optimistic update 는 미적용 — UX 체감 차이가 크지 않은 단순 폼이라 후속 과제로 둠).
 
 ### 8.3 학습으로 얻은 것 (요약)
 
@@ -1022,11 +1023,15 @@ frontend/
 
 ---
 
-## 부록 C. 다음 단계 (developer에게 넘기는 부분)
+## 부록 C. 후속 개선 과제
 
-developer 에이전트는 본 설계를 기반으로:
-1. Phase 1 작업부터 시작 (Spring Boot + Next.js 초기 스캐폴딩)
-2. 각 Day 산출물 단위로 커밋 (한국어 커밋 메시지)
-3. 의문점 발생 시 본 문서의 "결정 근거" 섹션 우선 확인, 부족하면 architect 재호출
+본 MVP 에서 의도적으로 제외했거나, 구현해놓고 추가 보강이 필요한 항목:
 
-> 본 문서는 살아있는 문서. 구현 중 결정이 바뀌면 해당 섹션을 수정하고 변경 이유를 부록 D(향후 작성)에 누적.
+- 요청별 일관 traceId MDC 주입 + 응답 헤더 노출 + 구조화 로그(JSON)
+- React Query optimistic update (현재는 invalidate 기반 refetch 만)
+- AWS Secrets Manager 마이그레이션 + 자동 회전 (현재 EC2 환경변수)
+- JWT 토큰을 localStorage → HttpOnly Secure SameSite 쿠키로 (XSS 표면 축소)
+- 사진 업로드 S3 흐름 E2E 시나리오 활성화 (현재 `test.fixme` 스킵)
+- CloudWatch / Loki 등 중앙 로그 수집
+- Rate limiting (현재 미적용)
+- ASG / ECS 로 진정한 수평 확장 (현재는 단일 EC2 위의 Blue/Green 컨테이너)
