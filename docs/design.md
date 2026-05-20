@@ -13,7 +13,7 @@
 - 핵심 트레이드오프:
   - 단순함 우선: 모놀리식 Spring Boot 1개 + Next.js 1개. MSA/큐/캐시는 모두 제외
   - 데이터 정합성 우선: 세션-세트 저장은 단일 트랜잭션, 동시성 충돌이 거의 없는 1인 사용 도메인이므로 락은 최소화
-  - 학습효과 우선: React Query / Playwright / Next.js BFF / S3 presigned URL 등 주요 기술을 실제 코드로 다뤄보는 데 초점
+  - 학습효과 우선: Playwright / Next.js BFF / S3 presigned URL / AWS 운영 (ALB Blue/Green, IAM Role) 등 주요 기술을 실제 코드로 다뤄보는 데 초점
   - 도메인 미구매 결정에 따라 Vercel 기본 도메인 + EC2 IP 직접 접근, HTTPS는 BFF로 해결
 
 ---
@@ -940,7 +940,7 @@ cors:
 
 - 풀스택 자력 구축 경험: 인프라(RDS/S3/EC2)부터 FE/BE까지 직접 운영 배포
 - AWS 실전: IAM Role, presigned URL, SG 분리, Blue/Green Rolling 배포 직접 구현
-- 신기술 빠른 학습: React Query, Playwright, Next.js App Router를 단기간에 운영 가능 수준으로 익힘
+- 신기술 빠른 학습: Playwright, Next.js App Router (Next.js 16 신문법 포함) 를 단기간에 운영 가능 수준으로 익힘
 - 트레이드오프 의식: 오버엔지니어링 회피, 단순함과 정합성의 균형
 
 ### 8.4 동작 확인 흐름 (수동 sanity check 용)
