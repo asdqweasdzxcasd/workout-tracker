@@ -19,7 +19,7 @@
 | 6.3 | EC2 IAM Role 부착, AccessKey 환경변수 제거 | ✅ |
 | 6.4 | ALB + Target Group + Blue/Green 2 컨테이너 + Rolling 배포 스크립트 | ✅ |
 | 6.5 | Vercel 프론트엔드 배포 (BFF 환경변수 연동) | ✅ |
-| 7   | Playwright E2E 12 시나리오 + GitHub Actions CI 자동화 | ✅ |
+| 7   | Playwright E2E 11 시나리오 (+ S3 업로드 1건 `test.fixme` 스킵) + GitHub Actions CI 자동화 | ✅ |
 
 ---
 
@@ -45,8 +45,12 @@ nano deploy/.env
 
 | 항목 | 값 | 비고 |
 |---|---|---|
+| `DB_URL` | RDS JDBC URL | `jdbc:postgresql://<RDS-ENDPOINT>:5432/workout_tracker` |
+| `DB_USERNAME` | RDS 마스터 사용자명 | 기본 `workout` |
 | `DB_PASSWORD` | RDS 마스터 비밀번호 | RDS 생성 시 설정한 값 |
 | `JWT_SECRET` | 64자 이상 랜덤 문자열 | `openssl rand -base64 64` 로 생성 |
+| `AWS_REGION` | AWS 리전 | 기본 `ap-northeast-2` |
+| `AWS_S3_BUCKET` | S3 버킷명 | 부트 시 필수 (default 없음) |
 
 > `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` 는 **불필요**. EC2 인스턴스에 `WorkoutTrackerEC2Role` IAM Role 이 부착되어 S3 SDK 가 IMDS 에서 임시 자격증명을 자동 획득한다.
 
@@ -242,8 +246,15 @@ docker exec -it workout-tracker-backend sh
 
 `software.amazon.awssdk.services.s3.model.S3Exception: Access Denied`:
 
-- `.env` 의 `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` 정확한지
-- IAM 사용자에 `s3:PutObject`, `s3:GetObject` 권한 있는지 (`<S3-BUCKET>/*`)
+- EC2 인스턴스에 `WorkoutTrackerEC2Role` IAM Role 이 부착됐는지 (Console → EC2 → 인스턴스 → 보안 → IAM 역할)
+- 해당 Role 에 `s3:PutObject`, `s3:GetObject`, `s3:DeleteObject` 권한 있는지 (`<S3-BUCKET>/*`)
+- IMDSv2 토큰으로 자격증명 확인:
+  ```bash
+  TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" \
+    -H "X-aws-ec2-metadata-token-ttl-seconds: 60")
+  curl -H "X-aws-ec2-metadata-token: $TOKEN" \
+    http://169.254.169.254/latest/meta-data/iam/security-credentials/
+  ```
 - 버킷 region 이 `ap-northeast-2` 인지 (region 불일치 시 SignatureDoesNotMatch)
 
 ### 7.6 컨테이너가 (unhealthy) 로 표시
@@ -265,7 +276,7 @@ EC2 인스턴스에 부착된 IAM Role: `WorkoutTrackerEC2Role`
 
 | 정책 | Action | Resource | 용도 |
 |---|---|---|---|
-| inline `workout-tracker-s3` | `s3:PutObject`, `s3:GetObject` | `arn:aws:s3:::<S3-BUCKET>/*` | 인증샷 업로드/다운로드 presigned URL 서명 |
+| inline `workout-tracker-s3` | `s3:PutObject`, `s3:GetObject`, `s3:DeleteObject` | `arn:aws:s3:::<S3-BUCKET>/*` | 인증샷 업로드/다운로드 presigned URL 서명 + 세션 삭제 시 S3 객체 정리 |
 | inline `workout-tracker-elb-rolling-deploy` | `elasticloadbalancing:DescribeTargetGroups`, `DescribeTargetHealth`, `RegisterTargets`, `DeregisterTargets` | `*` (TG 1개라 좁힐 의미 적음) | Rolling 배포 스크립트가 ALB 조작 |
 
 IAM Role 부착 후:
@@ -278,7 +289,7 @@ IAM Role 부착 후:
 | 항목 | 값 |
 |---|---|
 | ALB 이름 | `workout-tracker-alb` |
-| ALB DNS | `workout-tracker-alb-1440516911.ap-northeast-2.elb.amazonaws.com` |
+| ALB DNS | `<ALB-DNS>` (실제 값은 `.env` / Vercel 환경변수에만) |
 | Target Group | `workout-tracker-tg` (HTTP/8080, target type=instance) |
 | 등록 대상 | 같은 EC2 인스턴스 (`<EC2_INSTANCE_ID>`) 의 8080 / 8081 두 포트 |
 | 헬스체크 경로 | `/actuator/health` (HTTP 200 기대) |
@@ -301,7 +312,7 @@ IAM Role 부착 후:
 | Project | `workout-tracker` |
 | Root Directory | `frontend/` (모노레포라 명시) |
 | Framework | Next.js 16 (자동 감지) |
-| 환경변수 `EC2_API_URL` | `http://workout-tracker-alb-1440516911.ap-northeast-2.elb.amazonaws.com` |
+| 환경변수 `EC2_API_URL` | `http://<ALB-DNS>` |
 | 환경변수 `NEXT_PUBLIC_API_BASE_URL` | `/api/proxy` |
 
 브라우저 → Vercel HTTPS → 서버사이드 fetch → ALB HTTP. **서버사이드 호출은 CORS 무관**, Mixed Content 발생 안 함.
@@ -336,7 +347,7 @@ Step 5. curl /actuator/health 폴링 — 최대 5분 대기
 Step 6. npm ci                 — 프론트 의존성 설치
 Step 7. .env.local 동적 생성   — EC2_API_URL=http://localhost:8080
 Step 8. playwright install chromium --with-deps
-Step 9. npm run test:e2e       — 12 시나리오 실행
+Step 9. npm run test:e2e       — 11 시나리오 실행 (S3 업로드 1건은 `test.fixme` 스킵)
 Step 10~12. artifact 업로드 (always)
    ├─ playwright-report (HTML)
    ├─ playwright-test-results (trace.zip / screenshot / video)

@@ -50,8 +50,7 @@ aws s3api put-public-access-block \
   {
     "AllowedOrigins": [
       "http://localhost:3000",
-      "https://workout-tracker.vercel.app",
-      "https://*.vercel.app"
+      "https://<VERCEL-DOMAIN>"
     ],
     "AllowedMethods": ["PUT", "GET", "HEAD"],
     "AllowedHeaders": ["*"],

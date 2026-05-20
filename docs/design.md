@@ -427,7 +427,7 @@ src/app/
 │   └── proxy/
 │       └── [...path]/
 │           └── route.ts        # BFF: 모든 /api/proxy/* 를 EC2로 서버사이드 프록시
-└── middleware.ts               # JWT 토큰 존재 여부 검사 (라우트 가드)
+└── proxy.ts               # JWT 토큰 존재 여부 검사 (라우트 가드)
 ```
 
 ### 4.1.1 BFF 프록시 라우트 (핵심)
@@ -436,7 +436,7 @@ src/app/
 // src/app/api/proxy/[...path]/route.ts
 // Mixed Content 회피 + EC2 IP 은닉 위한 서버사이드 프록시
 
-const EC2_API_URL = process.env.EC2_API_URL!;  // http://3.34.190.95:8080
+const EC2_API_URL = process.env.EC2_API_URL!;  // http://<EC2-PUBLIC-IP>:8080
 
 async function proxy(request: Request, path: string[]) {
   const targetUrl = `${EC2_API_URL}/api/v1/${path.join('/')}${
@@ -466,7 +466,7 @@ export const DELETE = (req: Request, ctx) => proxy(req, ctx.params.path);
 ```
 
 - 브라우저는 항상 `https://workout-tracker.vercel.app/api/proxy/*` 만 호출
-- Vercel 서버가 `http://3.34.190.95:8080/api/v1/*` 로 전달
+- Vercel 서버가 `http://<EC2-PUBLIC-IP>:8080/api/v1/*` 로 전달
 - 브라우저 입장에서는 same-origin HTTPS 호출, EC2 IP는 외부에 노출되지 않음
 - JWT는 클라이언트가 Authorization 헤더로 BFF에 전달, BFF가 그대로 EC2로 forward
 
@@ -518,13 +518,15 @@ export const qk = {
 - sessions: 30초
 - me: 5분
 
-### 4.4 인증 가드 (middleware.ts) - Bearer 방식 확정
+### 4.4 인증 가드 (proxy.ts) - Bearer 방식 확정
+
+> Next.js 16 에서 `middleware` 파일 컨벤션이 `proxy` 로 rename. 본 문서는 16 기준으로 `proxy.ts` 표기.
 
 ```ts
 // 로직 요약
 // 1) /login, /signup, /api/proxy는 통과 (인증 불필요 또는 BFF가 처리)
 // 2) 그 외 보호 경로는 클라이언트 컴포넌트에서 토큰 확인 후 리다이렉트
-//    (middleware는 localStorage 접근 불가하므로 클라이언트 가드 위주)
+//    (proxy.ts(구 middleware)는 localStorage 접근 불가하므로 클라이언트 가드 위주)
 ```
 
 - JWT 전달: **Bearer 헤더 방식** (Authorization: Bearer <token>)
@@ -555,7 +557,7 @@ export const qk = {
 | 서버 상태 | React Query | 세션 목록, 운동 종류, 내 정보 |
 | 폼 상태 | react-hook-form | 세션 작성 폼 |
 | UI 상태 | useState/zustand(선택) | 사이드바 열림, 모달 |
-| 인증 상태 | 쿠키 + useQuery(qk.me) | 로그인 여부는 me 쿼리로 도출 |
+| 인증 상태 | localStorage + useQuery(qk.me) | 로그인 여부는 me 쿼리로 도출. 운영은 HttpOnly 쿠키 마이그레이션 예정 (4.4 참조) |
 
 > Redux 도입하지 않음 - MVP 규모에서 오버엔지니어링.
 
@@ -572,7 +574,7 @@ export const qk = {
 [Vercel ─ Next.js]
    ├─ 페이지 렌더링 (App Router + RSC)
    ├─ /api/proxy/* (BFF, 서버사이드 fetch)
-   └─ ENV: EC2_API_URL=http://3.34.190.95:8080
+   └─ ENV: EC2_API_URL=http://<EC2-PUBLIC-IP>:8080
      │
      │ HTTP (서버-to-서버, 브라우저 미경유 -> Mixed Content 회피)
      ▼
@@ -583,7 +585,7 @@ export const qk = {
      ▼ JDBC (VPC 내, SG 화이트리스트로 EC2만 허용)
 [RDS PostgreSQL 16 ─ db.t4g.micro]
 
-[Browser] ──(presigned PUT, HTTPS)── [S3 Bucket: workout-tracker-photos]
+[Browser] ──(presigned PUT, HTTPS)── [S3 Bucket: <S3-BUCKET>]
                                        └── 버킷 정책: 비공개, presigned로만 GET/PUT
                                        └── CORS: Vercel 도메인 허용
 ```
@@ -625,7 +627,7 @@ export const qk = {
 | s3 | 버킷 정책: BlockPublicAccess ON | - |
 
 #### IAM Role (EC2에 부착)
-- s3:PutObject, s3:GetObject (workout-tracker-photos/* 한정)
+- s3:PutObject, s3:GetObject (<S3-BUCKET>/* 한정)
 - secretsmanager:GetSecretValue (선택)
 - 절대 root key를 EC2에 두지 않음
 
@@ -677,9 +679,11 @@ export const qk = {
 
 ## 6. 7일 구현 일정
 
+> **본 절은 Day 0 설계 시점의 계획 스냅샷이다.** 실제 진행/완료 상태는 [`../README.md`](../README.md) 의 "7일 일정" 표와 [`../deploy/DEPLOY.md`](../deploy/DEPLOY.md) "진행한 Phase 요약" 을 참조. 본문의 `- [ ]` 체크박스는 의도적으로 미체크 상태로 보존 (계획-실행 비교용).
+
 ### 가정
 - 하루 5~6시간 작업 기준 (총 ~40h)
-- Day 1 아침 = 오늘부터 카운트
+- Day 1 = 설계 완료 직후 (2026-05-16)
 
 ### 일별 계획
 
@@ -716,7 +720,7 @@ export const qk = {
 - [ ] React Query 셋업
 - [ ] **src/app/api/proxy/[...path]/route.ts BFF 프록시 구현**
 - [ ] /login, /signup 페이지 + react-hook-form
-- [ ] middleware.ts 라우트 가드 (또는 클라이언트 가드)
+- [ ] proxy.ts 라우트 가드 (또는 클라이언트 가드)
 - [ ] /sessions 목록 페이지 + Pagination
 - [ ] /sessions/new 페이지 (운동 추가, 세트 추가 UX)
 - 산출물: 로그인 -> 세션 작성 -> 목록에 나옴 (모든 API 호출이 /api/proxy 경유 확인)
@@ -906,12 +910,12 @@ cors:
 - JWT_SECRET (32+ chars)
 - JWT_EXPIRES_IN=3600
 - AWS_REGION=ap-northeast-2
-- AWS_S3_BUCKET=workout-tracker-photos
+- AWS_S3_BUCKET=<S3-BUCKET>
 - CORS_ALLOWED_ORIGINS=https://workout-tracker.vercel.app,https://*.vercel.app
 
 ### Frontend (Next.js)
 - NEXT_PUBLIC_API_BASE_URL=/api/proxy           # 브라우저는 항상 same-origin BFF로
-- EC2_API_URL=http://3.34.190.95:8080          # 서버사이드 전용, BFF가 사용
+- EC2_API_URL=http://<EC2-PUBLIC-IP>:8080          # 서버사이드 전용, BFF가 사용
   (Vercel Project Settings -> Environment Variables -> Server-side)
 
 ## 부록 B. 디렉토리 구조
@@ -960,7 +964,7 @@ frontend/
     │   ├── api.ts          # axios/ky 인스턴스
     │   ├── queryKeys.ts
     │   └── queryClient.ts
-    ├── middleware.ts
+    ├── proxy.ts
     └── types/
 ```
 

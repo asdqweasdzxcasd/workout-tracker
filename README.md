@@ -98,7 +98,7 @@ gradlew.bat bootRun       # Windows
 
 - 부트 시 Flyway가 `V1__init.sql`, `V2__seed_exercises.sql`을 자동 적용
 - API: http://localhost:8080
-- Swagger UI: http://localhost:8080/swagger-ui.html (Day 2 이후 엔드포인트가 채워짐)
+- Swagger UI: http://localhost:8080/swagger-ui.html (Auth / Exercise / Session / Photo 전 엔드포인트 노출)
 
 기본 프로필은 `local`. 다른 프로필을 쓰려면 `SPRING_PROFILES_ACTIVE=xxx` 환경변수.
 
@@ -126,17 +126,27 @@ docker compose -f docker-compose.local.yml down
 ```
 workout-tracker/
 ├── backend/                       # Spring Boot
+│   ├── Dockerfile                 # 멀티스테이지 (JDK17 → JRE Alpine, non-root)
 │   ├── src/main/java/com/workouttracker/
 │   │   ├── auth/  user/  exercise/  session/  photo/  common/  config/
 │   │   └── WorkoutTrackerApplication.java
 │   └── src/main/resources/
 │       ├── application.yml
-│       ├── application-local.yml
+│       ├── application-{local,prod}.yml
 │       └── db/migration/{V1__init.sql, V2__seed_exercises.sql}
 ├── frontend/                      # Next.js 16 (App Router)
-│   └── src/{app, components, features, lib, types}
+│   ├── e2e/                       # Playwright 시나리오 (11개)
+│   ├── playwright.config.ts
+│   └── src/{app, components, features, lib, types, proxy.ts}
 ├── docs/
-│   └── design.md                  # 설계/일정 단일 소스
+│   ├── design.md                  # 설계/일정 단일 소스
+│   └── AWS_S3_SETUP.md            # S3 + IAM 셋업 가이드
+├── deploy/                        # 운영 배포
+│   ├── DEPLOY.md
+│   ├── docker-compose.prod.yml    # Blue/Green 2 컨테이너
+│   ├── rolling-deploy.sh          # 무중단 배포 스크립트
+│   └── .env.example
+├── .github/workflows/e2e.yml      # E2E CI (PostgreSQL + bootRun + Playwright)
 ├── docker-compose.local.yml
 ├── .env.local.example
 └── README.md
@@ -156,7 +166,7 @@ workout-tracker/
 | 4 | Frontend 인증/목록 + BFF 프록시 | ✅ |
 | 5 | PR/통계 + S3 인증샷 (presigned URL) | ✅ |
 | 6 | AWS 배포 (EC2/RDS/S3 + ALB Blue/Green + Vercel) | ✅ |
-| 7 | E2E (Playwright) + 문서화 | ⏳ |
+| 7 | E2E (Playwright 11 시나리오) + GitHub Actions CI + 문서화 | ✅ |
 
 세부 내용은 [`docs/design.md`](./docs/design.md) 6장 참고. 운영 배포 상세는 [`deploy/DEPLOY.md`](./deploy/DEPLOY.md).
 
