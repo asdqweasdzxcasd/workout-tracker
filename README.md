@@ -7,7 +7,7 @@
 - Backend: Java 17 + Spring Boot 3.3 (REST API)
 - Frontend: Next.js 16 (App Router) + TypeScript + Tailwind
 - DB: PostgreSQL 16 (로컬은 docker-compose, 운영은 AWS RDS)
-- 배포: **Vercel(FE BFF) + AWS EC2 Docker(BE Blue/Green) + ALB + RDS + S3**
+- 배포: **Vercel(FE BFF) + AWS ECS Fargate(BE) + ALB + RDS + S3** (V1 EC2 Blue/Green 구조도 보존)
 
 상세 설계, 일정, 트레이드오프는 [`docs/design.md`](./docs/design.md)를 참고.
 
