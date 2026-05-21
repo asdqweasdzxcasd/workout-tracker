@@ -215,7 +215,7 @@ erDiagram
 
 사전 요구:
 
-- Java 17 (Temurin/Adoptium 권장)
+- Java 17
 - Node.js 22 LTS 이상
 - Docker Desktop
 
