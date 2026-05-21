@@ -196,18 +196,18 @@ erDiagram
 
 ---
 
-## 로컬 vs 운영 환경
+## 로컬 vs 라이브 환경
 
-| 항목 | 로컬 (local) | 운영 (prod) |
+| 항목 | 로컬 (local) | 라이브 (V2 / V1 비교) |
 |---|---|---|
 | 프로필 | `application-local.yml` | `application-prod.yml` |
-| Spring Boot 실행 | `./gradlew bootRun` (호스트) | Docker 컨테이너 (`deploy/docker-compose.prod.yml`) |
+| Spring Boot 실행 | `./gradlew bootRun` (호스트) | V2: ECS Fargate Task / V1: Docker Compose 컨테이너 |
 | DB | `docker-compose.local.yml` 의 PostgreSQL 컨테이너 | AWS RDS PostgreSQL 16 |
 | 이미지 저장소 | (사용 안 함 or 로컬 IAM 키) | AWS S3 (`<S3-BUCKET>`) |
-| 시크릿 | `.env.local` (git 제외) | `deploy/.env` (git 제외) |
-| 자동 재시작 | 수동 | `restart: unless-stopped` |
+| 시크릿 | `.env.local` (git 제외) | V2: SSM Parameter Store SecureString / V1: `deploy/.env` |
+| 자동 재시작 / 자가 치유 | 수동 | V2: ECS Service desired count 유지 / V1: `restart: unless-stopped` |
 
-운영 배포 절차는 [`deploy/DEPLOY.md`](./deploy/DEPLOY.md) 참고.
+배포 절차는 [`deploy/DEPLOY.md`](./deploy/DEPLOY.md) 참고.
 
 ---
 
@@ -288,12 +288,18 @@ workout-tracker/
 ├── docs/
 │   ├── design.md                  # 설계/일정 단일 소스
 │   └── AWS_S3_SETUP.md            # S3 + IAM 셋업 가이드
-├── deploy/                        # 운영 배포
-│   ├── DEPLOY.md
-│   ├── docker-compose.prod.yml    # Blue/Green 2 컨테이너
-│   ├── rolling-deploy.sh          # 무중단 배포 스크립트
-│   └── .env.example
-├── .github/workflows/e2e.yml      # E2E CI (PostgreSQL + bootRun + Playwright)
+├── deploy/                        # 배포 자산
+│   ├── DEPLOY.md                  # V1/V2 배포 가이드 + 5가지 마이그레이션 함정
+│   ├── docker-compose.prod.yml    # V1: EC2 Blue/Green 2 컨테이너
+│   ├── rolling-deploy.sh          # V1: 무중단 배포 스크립트
+│   ├── .env.example
+│   └── ecs/                       # V2: ECS Fargate 자산
+│       ├── README.md              # ECS 셋업 가이드 + 실전 함정 정리
+│       ├── task-definition.json   # placeholder 치환형 Task Definition
+│       └── iam/                   # 3종 IAM Role 의 trust / inline policy JSON
+├── .github/workflows/
+│   ├── e2e.yml                    # E2E CI (PostgreSQL + bootRun + Playwright)
+│   └── deploy-ecs.yml             # V2 자동 배포 (OIDC → ECR → ECS UpdateService)
 ├── docker-compose.local.yml
 ├── .env.local.example
 └── README.md
@@ -312,10 +318,11 @@ workout-tracker/
 | 3 | 세션 도메인 (CRUD, 단일 트랜잭션) | ✅ |
 | 4 | Frontend 인증/목록 + BFF 프록시 | ✅ |
 | 5 | PR/통계 + S3 인증샷 (presigned URL) | ✅ |
-| 6 | AWS 배포 (EC2/RDS/S3 + ALB Blue/Green + Vercel) | ✅ |
+| 6 | AWS 배포 V1 (EC2/RDS/S3 + ALB Blue/Green + Vercel) | ✅ |
 | 7 | E2E (Playwright 11 시나리오) + GitHub Actions CI + 문서화 | ✅ |
+| 8 | **V1 → V2 마이그레이션** (ECS Fargate + ECR + SSM Parameter Store + 3 IAM Role + OIDC + GitHub Actions 자동 배포) | ✅ |
 
-세부 내용은 [`docs/design.md`](./docs/design.md) 6장 참고. 운영 배포 상세는 [`deploy/DEPLOY.md`](./deploy/DEPLOY.md).
+세부 내용은 [`docs/design.md`](./docs/design.md) 6장 참고. 배포 절차 / V1→V2 마이그레이션 함정 5가지는 [`deploy/DEPLOY.md`](./deploy/DEPLOY.md).
 
 ---
 

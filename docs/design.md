@@ -948,7 +948,7 @@ cors:
   - SG 체인 (alb-sg → web-sg → db-sg, 0.0.0.0/0 최소화)
   - V1: EC2 + Docker Compose Blue/Green + 직접 짠 Rolling 배포 스크립트
   - V2: ECS Fargate + ALB ip-target + Rolling Update + SSM Parameter Store
-- EC2 → ECS 마이그레이션 테스트: V1 → V2 옮기는 중 만난 3가지 함정 (Target type instance/ip 불호환, `logs:CreateLogGroup` 권한 누락, RDS SG 가 새 ECS task SG 차단) 진단/해결해봄
+- EC2 → ECS 마이그레이션 테스트: V1 → V2 옮기는 중 만난 5가지 함정 (Target type instance/ip 불호환, `logs:CreateLogGroup` 권한 누락, RDS SG 가 새 ECS task SG 차단, ALB 활성 AZ ↔ ECS Subnet AZ 미스매치, GH Actions `wait-for-minutes` < ECS 배포 사이클 시간 정책 불일치) 진단/해결해봄
 - Playwright 테스트: E2E 11 시나리오 + GitHub Actions CI 셋업
 - Next.js 16 신문법 테스트: `proxy.ts` (구 middleware) rename, hydration race 디버깅
 
@@ -1042,4 +1042,4 @@ frontend/
 - 사진 업로드 S3 흐름 E2E 시나리오 활성화 (현재 `test.fixme` 스킵)
 - CloudWatch / Loki 등 중앙 로그 수집
 - Rate limiting (현재 미적용)
-- ASG / ECS 로 진정한 수평 확장 (현재는 단일 EC2 위의 Blue/Green 컨테이너)
+- ECS Service Auto Scaling (CPU/요청 기반 자동 스케일) — V2 마이그레이션으로 ECS Fargate Multi-AZ 까지는 완료, 자동 스케일 정책 적용은 후속

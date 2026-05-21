@@ -661,9 +661,9 @@ flowchart TB
     ECS --> ALB["🟢 healthy 후 ALB Target Group 자동 등록"]
 ```
 
-### 12.6 마이그레이션 중 만난 함정 3가지 (talking point)
+### 12.6 마이그레이션 중 만난 함정 5가지 (talking point)
 
-V1 → V2 마이그레이션 진행 중 ECS Deployment Circuit Breaker 가 두 번 발동. 각각의 원인 + 해결:
+V1 → V2 마이그레이션 진행 중 ECS Deployment Circuit Breaker / 가짜 GitHub Actions fail 이 반복 발생. 각각의 원인 + 해결:
 
 #### 함정 1: ALB Target Group 의 target type mismatch
 **증상**: ECS Service 생성 마법사에서 옛 `workout-tracker-tg` (instance 타입) 선택 시 "Fargate awsvpc 모드와 호환 안 됨" 경고.
@@ -706,7 +706,70 @@ Caused by: java.net.SocketTimeoutException: Connect timed out
 유형: PostgreSQL  포트: 5432  소스: ecs-tasks-sg (sg-xxxxx)
 ```
 
-세 함정 모두 **Security Group / IAM 의 명시적 권한 부여**가 누락된 케이스. 운영 표준 패턴으로 옮기면서 V1 시절에 "암묵적으로 통과되던" 권한 경로가 새 환경에서 명시적 추가를 요구한다는 점.
+#### 함정 4: ALB 활성 AZ ≠ ECS Service Subnet AZ (미스매치)
+**증상**: 권한/SG 문제 다 풀린 뒤에도 매 배포마다 Deployment Circuit Breaker 가 발동해 자동 롤백. ECS Service Events 에 다음이 반복:
+```
+service workout-tracker-backend-svc task ... port 8080 is unhealthy
+in target-group workout-tracker-tg-fargate
+due to (reason Target is in an Availability Zone that is not enabled for the load balancer.)
+```
+
+**원인**:
+- ECS Service 의 네트워크 설정에 서브넷 4개 (4개 AZ 분산)
+- ALB 는 가용 영역 2개 (apne2-az1, apne2-az3) 만 활성화
+- 새 task 가 ALB 가 보지 못하는 AZ 의 서브넷에 launch 되면 ALB 가 healthy 처리 자체를 못 함 → unhealthy → 회로차단기 → 자동 롤백
+- 옛 task 가 "어쩌다 잘 돌던" 이유: 우연히 ALB-호환 AZ 에 떴기 때문
+- **가용 영역 리밸런싱 ON** 이 켜져있으면 ECS 가 다음 배포에서 다른 AZ 로 일부러 분산시켜 상황 악화
+
+**해결**:
+1. ECS Service 의 네트워크 설정 → 서브넷을 **ALB 가 활성화한 2개 AZ 의 서브넷으로만 축소**
+2. **가용 영역 리밸런싱 OFF** (2개 AZ 만 쓰므로 분산 의미 없음)
+3. 강제 새 배포 트리거
+
+```
+변경 전: subnet 4개 (서로 다른 4 AZ, ALB 는 2 AZ 만 알아봄)
+변경 후: subnet 2개 (ALB 활성 AZ 정확히 일치)
+```
+
+**대안**: ALB 에 가용 영역 추가도 가능하지만 ALB 가 인터넷-facing 인 경우 추가 서브넷이 Public 이어야 하는 등 조건 까다로워 ECS 쪽을 좁히는 것이 안전.
+
+#### 함정 5: GitHub Actions `wait-for-minutes` < ECS 실제 배포 사이클
+**증상**: ECS Deploy 단계가 `{"state":"TIMEOUT","reason":"Waiter has timed out"}` 로 fail 마킹. 그러나 ECS 콘솔에서는 같은 배포가 결국 ✅ 성공 — GH 시각에서는 실패, ECS 시각에서는 성공인 모순 상태.
+
+**원인**: ECS Rolling Update 한 사이클 소요 시간 ~17분:
+
+| 구간 | 소요 |
+|---|---|
+| 새 task launch + Spring Boot 부팅 | ~70초 |
+| Health check grace period | 180초 |
+| Target Group healthy 통과 (정상 임계값 2 × 30s 간격) | ~60초 |
+| **옛 task drain** (Target Group `deregistration_delay` 기본 300초) | **5분** |
+| ECS reconciliation 오버헤드 | ~30~60초 |
+| **합계** | **약 17~18분** |
+
+`amazon-ecs-deploy-task-definition@v2` 의 `wait-for-minutes: 15` 가 ECS 실제 사이클보다 짧아 GH 가 먼저 timeout. 본질은 **3개 계층 (GH Actions / ECS Circuit Breaker / Target Group drain) 의 시간 정책이 서로 어긋난 상태**.
+
+**해결** (두 가지 같이):
+1. `.github/workflows/deploy-ecs.yml` 의 `wait-for-minutes: 15 → 25`
+2. ALB Target Group 의 `등록 취소 지연 (deregistration_delay)` 300 → **60초** (EC2 → 대상 그룹 → 속성 탭)
+- 결과: drain 5분 → 1분, 전체 배포 ~12분, GH 25분 wait 안에 ECS 완료 신호 받고 정상 success 마킹
+
+**부수 학습**:
+- ALB 의 deregistration_delay 는 **시간 기반 정책** 이지 컨테이너 응답 모니터링이 아님. "in-flight 요청이 정말 끝났는지" 와 무관하게 시간만큼 무조건 draining 상태 유지
+- 워크로드가 long-running 요청이 없는 REST API 면 60초로 줄여도 사용자 영향 거의 없음
+
+---
+
+다섯 함정 분류 요약:
+
+| # | 분류 | 원인 |
+|---|---|---|
+| 1 | 네트워킹 호환성 | TG target type instance ↔ Fargate awsvpc |
+| 2, 3 | IAM / SG 권한 누락 | V1 에서 암묵적이던 권한 경로 명시화 |
+| 4 | AZ 토폴로지 미스매치 | ALB ↔ ECS Subnet AZ 불일치 |
+| 5 | 시간 정책 계층화 미흡 | GH ↔ ECS ↔ TG 세 계층의 timeout 어긋남 |
+
+운영 표준 패턴으로 옮기면서 V1 시절 "어쩌다 잘 돌던" 상태를 명시적 설정으로 다시 잡아야 했던 경험.
 
 ### 12.7 V1 보존 / V2 동시 운영
 

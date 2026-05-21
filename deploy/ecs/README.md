@@ -283,9 +283,9 @@ aws ecs update-service \
 
 ## 트러블슈팅
 
-### 실전 사례: 마이그레이션 중 만난 3가지 함정
+### 실전 사례: 마이그레이션 중 만난 5가지 함정
 
-본 프로젝트 V1→V2 진행 중 실제로 만난 함정. ECS Deployment Circuit Breaker 가 두 번 발동.
+본 프로젝트 V1→V2 진행 중 실제로 만난 함정. ECS Deployment Circuit Breaker 와 GitHub Actions 의 가짜 timeout fail 가 반복 발생.
 
 #### ① ALB Target Group `instance` ↔ Fargate `awsvpc` 호환 안 됨
 **증상**: ECS Service 생성 마법사에서 옛 instance-type TG 선택 시 비활성 + "Fargate awsvpc 모드와 호환 안 됨" 경고.
@@ -324,7 +324,34 @@ at org.postgresql.core.PGStream.createSocket(...)
 
 **해결**: RDS SG 인바운드 규칙 추가 — `PostgreSQL 5432 ← ecs-tasks-sg`.
 
-세 사례 모두 V1 에서 V2 로 옮기면서 "암묵적으로 통과되던 권한 경로"를 명시적으로 다시 부여해야 했던 케이스. SG 체인과 IAM 권한 분리를 점검 항목으로 가져갈 가치.
+#### ④ ALB 활성 AZ ≠ ECS Service Subnet AZ
+**증상**: 위 세 함정 다 잡고도 매 배포마다 Deployment Circuit Breaker 발동, 자동 롤백.
+```
+service ... port 8080 is unhealthy in target-group workout-tracker-tg-fargate
+due to (reason Target is in an Availability Zone that is not enabled for the load balancer.)
+```
+
+**원인**: ECS Service 의 서브넷이 4개 AZ 에 걸쳐 있는데 ALB 는 2개 AZ 만 활성화. 새 task 가 ALB 가 모르는 AZ 의 subnet 에 launch 되면 healthy 처리 자체 불가 → Circuit Breaker → 롤백. 가용 영역 리밸런싱이 ON 이면 ECS 가 더 적극적으로 분산해서 악화.
+
+**해결**:
+1. ECS Service 의 네트워크 설정에서 서브넷을 ALB 활성 AZ 2개로 축소
+2. 가용 영역 리밸런싱 OFF
+3. 강제 새 배포 트리거
+
+#### ⑤ GitHub Actions `wait-for-minutes` < ECS 배포 사이클
+**증상**: GH Actions Deploy 단계가 `{"state":"TIMEOUT","reason":"Waiter has timed out"}` 로 실패, 그러나 ECS 콘솔의 같은 배포는 결국 성공.
+
+**원인**: ECS Rolling Update + drain 5분 (Target Group `deregistration_delay` 기본 300초) + Spring Boot 부팅 + 헬스체크 grace 가 합쳐 ~17분. `amazon-ecs-deploy-task-definition@v2` 의 `wait-for-minutes: 15` 가 더 짧아 가짜 timeout.
+
+**해결**:
+1. `wait-for-minutes: 15 → 25`
+2. ALB Target Group `등록 취소 지연 (deregistration_delay)` 300 → 60초
+
+→ 전체 배포 ~12분 + GH 가 끝까지 기다려 정상 success 마킹.
+
+---
+
+다섯 함정 모두 V1 에서 V2 로 옮기면서 "암묵적으로 통과되던 권한·시간·토폴로지 설정"을 명시적으로 다시 잡아야 했던 케이스. SG 체인 / IAM 권한 분리 / AZ 토폴로지 / 시간 정책 계층화를 점검 항목으로 가져갈 가치.
 
 ---
 
