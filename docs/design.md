@@ -1,7 +1,7 @@
 # workout-tracker MVP 설계 문서
 
 > 목적: AWS / Vercel / Spring Boot / Next.js 등 풀스택 운영 스택을 실제로 다뤄보는 개인 학습 프로젝트
-> 범위: MVP 1세트 (운영 배포 + E2E 자동화 포함)
+> 범위: MVP 1세트 (배포 + E2E 자동화 포함)
 
 ---
 
@@ -13,7 +13,7 @@
 - 핵심 트레이드오프:
   - 단순함 우선: 모놀리식 Spring Boot 1개 + Next.js 1개. MSA/큐/캐시는 모두 제외
   - 데이터 정합성 우선: 세션-세트 저장은 단일 트랜잭션, 동시성 충돌이 거의 없는 1인 사용 도메인이므로 락은 최소화
-  - 학습효과 우선: Playwright / Next.js BFF / S3 presigned URL / AWS 운영 (ALB Blue/Green, IAM Role) 등 주요 기술을 실제 코드로 다뤄보는 데 초점
+  - 학습효과 우선: Playwright / Next.js BFF / S3 presigned URL / AWS 인프라 (ALB Blue/Green, IAM Role) 등 주요 기술을 실제 코드로 다뤄보는 데 초점
   - 도메인 미구매 결정에 따라 Vercel 기본 도메인 + EC2 IP 직접 접근, HTTPS는 BFF로 해결
 
 ---
@@ -893,7 +893,7 @@ cors:
 
 ---
 
-## 8. 운영 경험 / talking point
+## 8. talking point
 
 ### 8.1 다뤄본 기술 스택
 
@@ -907,7 +907,7 @@ cors:
 | Docker | 멀티스테이지 Dockerfile + docker-compose |
 | AWS EC2 | 백엔드 호스팅 + Blue/Green 2 컨테이너 |
 | AWS ALB | Target Group + Rolling 무중단 배포 |
-| AWS RDS | PostgreSQL 16 운영 (SG 격리) |
+| AWS RDS | PostgreSQL 16 (SG 격리) |
 | AWS S3 | 인증샷 + presigned URL |
 | AWS IAM Role | EC2 IMDSv2 자격증명 (AccessKey 미사용) |
 | 데이터 집계 쿼리 | PR/볼륨 1쿼리 추출 |
@@ -941,16 +941,16 @@ cors:
 
 ### 8.3 테스트 내용
 
-- **풀스택 운영 배포**: 인프라(RDS / S3 / EC2 / ECS Fargate)부터 FE / BE 까지 직접 셋업 + 라이브 운영
-- **AWS 운영 실전**:
+- 풀스택 배포 테스트: RDS / S3 / EC2 / ECS Fargate / Vercel 까지 직접 셋업해 라이브 동작 확인
+- AWS 인프라 테스트:
   - IAM Role 3종 분리 + OIDC 기반 GitHub Actions 인증
-  - S3 presigned URL 워크플로우 (백엔드 우회 업로드)
+  - S3 presigned URL 흐름 (백엔드 우회 업로드)
   - SG 체인 (alb-sg → web-sg → db-sg, 0.0.0.0/0 최소화)
-  - V1: EC2 + Docker Compose Blue/Green + 직접 짠 Rolling 스크립트
+  - V1: EC2 + Docker Compose Blue/Green + 직접 짠 Rolling 배포 스크립트
   - V2: ECS Fargate + ALB ip-target + Rolling Update + SSM Parameter Store
-- **마이그레이션 실전**: V1 → V2 옮기는 중 만난 3가지 함정 (Target type instance/ip 불호환, `logs:CreateLogGroup` 권한 누락, RDS SG 가 새 ECS task SG 차단) 을 진단/해결
-- **신기술 적용**: Playwright E2E (11 시나리오 + GitHub Actions CI), Next.js 16 신문법(`proxy.ts` rename, hydration race 디버깅) 을 운영 수준으로 적용
-- **트레이드오프 의식**: 오버엔지니어링 회피, 단순함과 정합성의 균형 (단일 EC2 시작 → 운영 표준 ECS 로 점진 이전, V1 코드는 보존)
+- EC2 → ECS 마이그레이션 테스트: V1 → V2 옮기는 중 만난 3가지 함정 (Target type instance/ip 불호환, `logs:CreateLogGroup` 권한 누락, RDS SG 가 새 ECS task SG 차단) 진단/해결해봄
+- Playwright 테스트: E2E 11 시나리오 + GitHub Actions CI 셋업
+- Next.js 16 신문법 테스트: `proxy.ts` (구 middleware) rename, hydration race 디버깅
 
 ### 8.4 동작 확인 흐름 (수동 sanity check 용)
 
