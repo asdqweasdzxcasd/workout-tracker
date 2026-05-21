@@ -1,0 +1,116 @@
+# =====================================================
+# workout-tracker → ECS Fargate 자동 배포
+#
+# 흐름:
+#   1. main 브랜치 push 트리거
+#   2. (선택) E2E workflow 결과 확인 — 통과하지 못한 main 은 배포 X
+#   3. AWS OIDC 로 임시 자격증명 발급 (long-lived AccessKey 미사용)
+#   4. Docker 이미지 빌드 → ECR push (태그: commit SHA + latest)
+#   5. task-definition.json 의 placeholder 치환 → 새 revision 등록
+#   6. ECS Service update → rolling deployment 자동
+#   7. ECS 가 Deployment 안정화 (Steady state) 까지 대기
+#
+# 필수 GitHub 설정 (Settings → Secrets and variables → Actions):
+#   Variables:
+#     AWS_REGION              ap-northeast-2
+#     AWS_ACCOUNT_ID          <12-digit-account-id>
+#     ECR_REPOSITORY          workout-tracker-backend
+#     ECS_CLUSTER             workout-tracker-cluster
+#     ECS_SERVICE             workout-tracker-backend-svc
+#     S3_BUCKET               <실제 S3 버킷명>
+#     DEPLOY_ROLE_ARN         arn:aws:iam::<ACCOUNT_ID>:role/WorkoutTrackerGithubDeployRole
+# =====================================================
+name: Deploy ECS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# OIDC 자격증명 발급에 필요한 권한
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    name: Build → ECR → ECS
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+      ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+      ECS_CLUSTER: ${{ vars.ECS_CLUSTER }}
+      ECS_SERVICE: ${{ vars.ECS_SERVICE }}
+      S3_BUCKET: ${{ vars.S3_BUCKET }}
+      IMAGE_TAG: ${{ github.sha }}
+      TASK_DEF_FILE: deploy/ecs/task-definition.json
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # --------------------------------------------------
+      # OIDC 로 AWS 임시 자격증명 발급 (long-lived AccessKey 미사용)
+      # --------------------------------------------------
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # --------------------------------------------------
+      # ECR 로그인 + 이미지 빌드/푸시
+      # --------------------------------------------------
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        working-directory: backend
+        run: |
+          REGISTRY=${{ steps.ecr-login.outputs.registry }}
+          IMAGE_URI="$REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          echo "Building $IMAGE_URI"
+          docker build -t "$IMAGE_URI" -t "$REGISTRY/$ECR_REPOSITORY:latest" .
+          docker push "$IMAGE_URI"
+          docker push "$REGISTRY/$ECR_REPOSITORY:latest"
+          echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_ENV
+
+      # --------------------------------------------------
+      # Task Definition placeholder 치환
+      # --------------------------------------------------
+      - name: Render task definition
+        run: |
+          sed \
+            -e "s|__ACCOUNT_ID__|$AWS_ACCOUNT_ID|g" \
+            -e "s|__AWS_REGION__|$AWS_REGION|g" \
+            -e "s|__IMAGE_TAG__|$IMAGE_TAG|g" \
+            -e "s|__S3_BUCKET__|$S3_BUCKET|g" \
+            "$TASK_DEF_FILE" > task-definition.rendered.json
+          echo "--- Rendered task definition ---"
+          cat task-definition.rendered.json
+
+      # --------------------------------------------------
+      # 새 Task Definition 등록 + Service update
+      # --------------------------------------------------
+      - name: Deploy to ECS
+        id: deploy
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: task-definition.rendered.json
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+          wait-for-minutes: 15
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Deploy Result" >> $GITHUB_STEP_SUMMARY
+          echo "- Image: \`$IMAGE_URI\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Cluster: \`$ECS_CLUSTER\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Service: \`$ECS_SERVICE\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Commit: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,59 @@
+{
+  "family": "workout-tracker-backend",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::__ACCOUNT_ID__:role/WorkoutTrackerEcsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::__ACCOUNT_ID__:role/WorkoutTrackerEcsTaskRole",
+  "runtimePlatform": {
+    "cpuArchitecture": "X86_64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "containerDefinitions": [
+    {
+      "name": "workout-tracker-backend",
+      "image": "__ACCOUNT_ID__.dkr.ecr.__AWS_REGION__.amazonaws.com/workout-tracker-backend:__IMAGE_TAG__",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8080,
+          "hostPort": 8080,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        { "name": "SPRING_PROFILES_ACTIVE", "value": "prod" },
+        { "name": "TZ", "value": "Asia/Seoul" },
+        { "name": "AWS_REGION", "value": "__AWS_REGION__" },
+        { "name": "AWS_S3_BUCKET", "value": "__S3_BUCKET__" }
+      ],
+      "secrets": [
+        { "name": "DB_URL",      "valueFrom": "arn:aws:ssm:__AWS_REGION__:__ACCOUNT_ID__:parameter/workout-tracker/DB_URL" },
+        { "name": "DB_USERNAME", "valueFrom": "arn:aws:ssm:__AWS_REGION__:__ACCOUNT_ID__:parameter/workout-tracker/DB_USERNAME" },
+        { "name": "DB_PASSWORD", "valueFrom": "arn:aws:ssm:__AWS_REGION__:__ACCOUNT_ID__:parameter/workout-tracker/DB_PASSWORD" },
+        { "name": "JWT_SECRET",  "valueFrom": "arn:aws:ssm:__AWS_REGION__:__ACCOUNT_ID__:parameter/workout-tracker/JWT_SECRET" }
+      ],
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "wget --quiet --tries=1 --spider http://localhost:8080/actuator/health || exit 1"
+        ],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/workout-tracker-backend",
+          "awslogs-region": "__AWS_REGION__",
+          "awslogs-stream-prefix": "ecs",
+          "awslogs-create-group": "true"
+        }
+      },
+      "stopTimeout": 30
+    }
+  ]
+}
