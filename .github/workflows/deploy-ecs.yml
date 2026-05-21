@@ -111,7 +111,10 @@ jobs:
           service: ${{ env.ECS_SERVICE }}
           cluster: ${{ env.ECS_CLUSTER }}
           wait-for-service-stability: true
-          wait-for-minutes: 15
+          # ECS Rolling Update 한 사이클 ~17분이 걸릴 수 있음 (옛 태스크 drain 5분 포함).
+          # 15분이면 가짜 timeout fail 발생 → 25분으로 여유.
+          # Target Group deregistration_delay 를 60s 로 줄이면 12분 안에 끝남.
+          wait-for-minutes: 25
 
       - name: Summary
         if: always()
