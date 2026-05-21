@@ -22,7 +22,7 @@
 
 > 회원가입은 누구나 가능. AWS 비용 절감 위해 비활성화될 수 있다.
 
-## 🏗️ 운영 아키텍처
+## 🏗️ 운영 아키텍처 — V2 (현재, ECS Fargate)
 
 ```mermaid
 flowchart TB
@@ -35,27 +35,39 @@ flowchart TB
     end
 
     subgraph AWS["☁️ AWS ap-northeast-2"]
-        ALB["Application Load Balancer<br/>workout-tracker-alb"]
+        ALB["Application Load Balancer<br/>workout-tracker-alb<br/>(Target Group: ip 타입)"]
 
-        subgraph EC2["EC2 t3.small"]
-            Blue["🟦 Blue :8080<br/>Spring Boot"]
-            Green["🟩 Green :8081<br/>Spring Boot"]
+        subgraph ECS["ECS Cluster (Fargate)"]
+            Task1["📦 Task #1<br/>Spring Boot<br/>0.5 vCPU / 1GB"]
+            Task2["📦 Task #2<br/>Spring Boot<br/>0.5 vCPU / 1GB"]
         end
 
         RDS[("🗄️ RDS<br/>PostgreSQL 16")]
         S3[("📷 S3<br/>인증샷")]
-        IAM(["🔑 IAM Role<br/>WorkoutTrackerEC2Role"])
+
+        subgraph IAM["🔑 IAM Roles (3)"]
+            TER["TaskExecutionRole<br/>ECR pull + Logs + SSM read"]
+            TR["TaskRole<br/>S3 PutObject/GetObject/DeleteObject"]
+            GHA["GithubDeployRole<br/>(OIDC)<br/>ECR push + ECS UpdateService"]
+        end
+
+        SSM[("🔐 SSM Parameter Store<br/>DB_URL / DB_PASSWORD<br/>JWT_SECRET (SecureString)")]
     end
 
     User -->|HTTPS| Pages
     BFF -->|HTTP| ALB
-    ALB --> Blue
-    ALB --> Green
-    Blue --> RDS
-    Green --> RDS
-    Blue -.->|presigned URL| S3
-    Green -.->|presigned URL| S3
-    IAM -.->|IMDSv2 자격증명| EC2
+    ALB --> Task1
+    ALB --> Task2
+    Task1 --> RDS
+    Task2 --> RDS
+    Task1 -.->|presigned URL| S3
+    Task2 -.->|presigned URL| S3
+    TER -.-> Task1
+    TER -.-> Task2
+    TR -.-> Task1
+    TR -.-> Task2
+    SSM -.->|Task 시작 시 주입| Task1
+    SSM -.->|Task 시작 시 주입| Task2
 
     classDef vercel fill:#000,stroke:#fff,color:#fff
     classDef aws fill:#FF9900,stroke:#232F3E,color:#fff
@@ -63,11 +75,64 @@ flowchart TB
     class AWS aws
 ```
 
-핵심 운영 특성:
-- **무중단 배포**: Blue/Green 2 컨테이너 + ALB Target Group + Rolling 스크립트 (`deploy/rolling-deploy.sh`)
-- **시크릿 제로**: EC2 → S3 는 IAM Role (AccessKey 미사용), `.env` 에 DB/JWT 만
-- **Mixed Content 회피**: 브라우저는 same-origin HTTPS, BFF 가 서버사이드 HTTP fetch
-- **Backend 주소 은닉**: ALB DNS 는 Vercel 환경변수에만 존재, 클라이언트에 미노출
+V2 핵심 운영 특성:
+- **서버리스 컨테이너**: Fargate — 인스턴스 패치/관리 불필요, 자동 자가 치유 (task 죽으면 ECS 가 재시작)
+- **Rolling Update 표준**: `maximumPercent=200%` 로 새 task 2개 띄운 후 옛 task 종료 (다운타임 0초)
+- **OIDC 기반 배포**: GitHub Actions 가 long-lived AccessKey 없이 임시 자격증명 받아 ECR push + ECS UpdateService
+- **시크릿 분리**: 모든 시크릿이 **SSM Parameter Store SecureString** 으로 분리 → Task Definition 에 ARN 만 참조, 컨테이너 시작 시 자동 주입. 코드/`.env`/GitHub 어디에도 평문 시크릿 없음.
+- **최소 권한 원칙**: IAM Role 을 Task 실행용 / 애플리케이션용 / 배포용 3개로 분리. `iam:PassRole` 도 정확히 2개 Role 만 허용.
+- **Target Type `ip`**: Fargate `awsvpc` 네트워크 모드 → 컨테이너마다 ENI 부여 → ALB 가 task IP 에 직접 라우팅 (instance 타입 X)
+
+<details>
+<summary><strong>📜 V1 (옛 EC2 + Docker Compose Blue/Green)</strong> 보기</summary>
+
+V2 마이그레이션 전 구조 — 코드는 `deploy/docker-compose.prod.yml` + `deploy/rolling-deploy.sh` 로 보존.
+
+```mermaid
+flowchart TB
+    User([👤 User Browser])
+
+    subgraph Vercel["☁️ Vercel"]
+        BFF["BFF /api/proxy/*"]
+    end
+
+    subgraph AWS["☁️ AWS"]
+        ALB["ALB<br/>(Target Group: instance 타입)"]
+
+        subgraph EC2["EC2 t3.small (단일 인스턴스)"]
+            Blue["🟦 Blue :8080<br/>Spring Boot"]
+            Green["🟩 Green :8081<br/>Spring Boot"]
+        end
+
+        RDS[("RDS PostgreSQL")]
+        S3[("S3")]
+        IAM(["🔑 EC2 IAM Role<br/>(S3 + ELB API)"])
+    end
+
+    User --> BFF
+    BFF --> ALB
+    ALB --> Blue
+    ALB --> Green
+    Blue --> RDS
+    Green --> RDS
+    Blue -.-> S3
+    Green -.-> S3
+    IAM -.-> EC2
+```
+
+| 특성 | V1 (EC2 + Compose) | V2 (ECS Fargate) |
+|---|---|---|
+| 인프라 관리 | EC2 패치 / docker 업그레이드 직접 | **불필요** (Fargate) |
+| 자가 치유 | EC2 죽으면 끝 (SPOF) | Task 죽으면 자동 재시작, Multi-AZ |
+| 배포 자동화 | bash 스크립트 (`rolling-deploy.sh`) 가 ALB API 직접 호출 | GitHub Actions → ECS UpdateService 자동 |
+| 시크릿 | EC2 의 `.env` 파일 | **SSM Parameter Store SecureString** |
+| 인증 | EC2 IAM Role (IMDSv2) | Task Role + Task Execution Role 분리 |
+| ALB Target Type | `instance` (EC2 인스턴스) | `ip` (Fargate awsvpc ENI) |
+| 학습 가치 | "Rolling 패턴의 핵심 메커니즘 직접 구현" | "운영 표준 패턴 (ECS)" |
+
+V1 도 코드 보존 — Rolling 스크립트의 deregister → drain → restart → register 흐름을 직접 짠 경험은 ECS Rolling Update 의 내부 동작 이해에 직결.
+
+</details>
 
 ## 🗄️ 데이터 모델
 

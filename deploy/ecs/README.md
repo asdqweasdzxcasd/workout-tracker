@@ -283,17 +283,65 @@ aws ecs update-service \
 
 ## 트러블슈팅
 
-### Task 가 PROVISIONING 에서 멈춤
+### 실전 사례: 마이그레이션 중 만난 3가지 함정
+
+본 프로젝트 V1→V2 진행 중 실제로 만난 함정. ECS Deployment Circuit Breaker 가 두 번 발동.
+
+#### ① ALB Target Group `instance` ↔ Fargate `awsvpc` 호환 안 됨
+**증상**: ECS Service 생성 마법사에서 옛 instance-type TG 선택 시 비활성 + "Fargate awsvpc 모드와 호환 안 됨" 경고.
+
+**원인**: Fargate 는 task 마다 ENI 부여 (awsvpc 모드) → ALB Target Group 의 target type 이 `ip` 여야 함. 옛 V1 TG 는 EC2 instance ID 등록용이라 부적합.
+
+**해결**: 새 TG `workout-tracker-tg-fargate` (target type=ip) 생성 + ALB Listener default forward 를 새 TG 로 변경.
+
+#### ② `logs:CreateLogGroup` 권한 부재
+**증상**: 첫 배포 즉시 task 가 `STOPPED (TaskFailedToStart)`. 이벤트 메시지:
+```
+ResourceInitializationError: failed to validate logger args:
+... AccessDeniedException ... is not authorized to perform: logs:CreateLogGroup
+```
+
+**원인**: 관리형 정책 `AmazonECSTaskExecutionRolePolicy` 는 PutLogEvents 만 허용. Task Definition 의 `awslogs-create-group: "true"` 옵션 사용 시 권한 부족.
+
+**해결**: Task Execution Role 의 인라인 정책에 다음 Statement 추가:
+```json
+{
+  "Sid": "CloudWatchLogsCreateGroup",
+  "Effect": "Allow",
+  "Action": ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"],
+  "Resource": "arn:aws:logs:*:*:log-group:/ecs/workout-tracker-*:*"
+}
+```
+
+#### ③ RDS Security Group 이 새 `ecs-tasks-sg` 차단
+**증상**: ②번 해결 후 컨테이너 시작은 됐으나 Spring Boot 부팅 도중 DB 연결 timeout.
+```
+Caused by: java.net.SocketTimeoutException: Connect timed out
+at org.postgresql.core.PGStream.createSocket(...)
+```
+
+**원인**: RDS Security Group 의 인바운드가 V1 시절의 `web-sg` (EC2) 만 허용. 새 `ecs-tasks-sg` 는 RDS 가 모름.
+
+**해결**: RDS SG 인바운드 규칙 추가 — `PostgreSQL 5432 ← ecs-tasks-sg`.
+
+세 사례 모두 V1 에서 V2 로 옮기면서 "암묵적으로 통과되던 권한 경로"를 명시적으로 다시 부여해야 했던 케이스. SG 체인과 IAM 권한 분리를 점검 항목으로 가져갈 가치.
+
+---
+
+### 일반 트러블슈팅
+
+#### Task 가 PROVISIONING 에서 멈춤
 - Subnet 가 private 인데 NAT Gateway 없음 → ECR pull 실패
 - 해결: Subnet 을 Public 으로 + Auto-assign public IP
 
-### Task 가 STOPPED with exit code 1
+#### Task 가 STOPPED with exit code 1
 - CloudWatch Logs `/ecs/workout-tracker-backend` 에서 부팅 로그 확인
 - 가장 흔한 원인: SSM Parameter 읽기 실패 → Task Execution Role 의 SSM 권한 점검
 
-### Target Group 이 unhealthy
+#### Target Group 이 unhealthy
 - ALB SG → ECS tasks SG inbound 8080 허용 확인
 - Task Definition health check 가 `localhost:8080/actuator/health` 200 반환 확인 (`docker exec` 으로 직접 확인 어려움 — CloudWatch Logs 활용)
+- Service 의 `상태 검사 유예 기간` 이 너무 짧음 (Spring Boot 부팅 60초+ 고려해 60 이상 권장)
 
 ### ECR push 권한 에러
 - DEPLOY_ROLE_ARN 의 trust policy `sub` 가 `repo:asdqweasdzxcasd/workout-tracker:ref:refs/heads/main` 와 정확히 일치하는지
