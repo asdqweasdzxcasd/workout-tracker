@@ -128,7 +128,7 @@ flowchart TB
 | 시크릿 | EC2 의 `.env` 파일 | **SSM Parameter Store SecureString** |
 | 인증 | EC2 IAM Role (IMDSv2) | Task Role + Task Execution Role 분리 |
 | ALB Target Type | `instance` (EC2 인스턴스) | `ip` (Fargate awsvpc ENI) |
-| 학습 가치 | "Rolling 패턴의 핵심 메커니즘 직접 구현" | "운영 표준 패턴 (ECS)" |
+| 비고 | Rolling 패턴의 핵심 메커니즘 직접 구현 | 운영 표준 패턴 (ECS) |
 
 V1 도 코드 보존 — Rolling 스크립트의 deregister → drain → restart → register 흐름을 직접 짠 경험은 ECS Rolling Update 의 내부 동작 이해에 직결.
 

@@ -893,7 +893,7 @@ cors:
 
 ---
 
-## 8. 학습 효과 / talking point
+## 8. 운영 경험 / talking point
 
 ### 8.1 다뤄본 기술 스택
 
@@ -939,7 +939,7 @@ cors:
 7. "React Query를 왜 도입?"
    - 서버 상태(목록/상세)는 캐시/재요청 일관성 처리가 필요. useState로 직접 관리하면 stale 데이터 / 중복 fetch / 로딩 상태 분기가 폭증. 본 MVP 는 invalidateQueries 기반 자동 refetch 만 적용 (optimistic update 는 미적용 — UX 체감 차이가 크지 않은 단순 폼이라 후속 과제로 둠).
 
-### 8.3 직접 다뤄본 운영 경험
+### 8.3 테스트 내용
 
 - **풀스택 운영 배포**: 인프라(RDS / S3 / EC2 / ECS Fargate)부터 FE / BE 까지 직접 셋업 + 라이브 운영
 - **AWS 운영 실전**:
