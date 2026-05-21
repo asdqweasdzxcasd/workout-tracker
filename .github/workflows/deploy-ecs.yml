@@ -27,6 +27,13 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# 같은 group 의 진행 중 run 이 있으면 그것을 cancel 하고 새 run 만 진행.
+# 짧은 시간에 여러 commit 이 push 되어도 ECS 에는 마지막 commit 만 배포되어
+# UpdateService 충돌 / queue 적체를 방지한다.
+concurrency:
+  group: deploy-ecs-${{ github.ref }}
+  cancel-in-progress: true
+
 # OIDC 자격증명 발급에 필요한 권한
 permissions:
   id-token: write
