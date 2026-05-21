@@ -714,16 +714,6 @@ Caused by: java.net.SocketTimeoutException: Connect timed out
 - V1 EC2 인스턴스는 정지 (필요 시 삭제). 컨테이너는 계속 떠 있어도 ALB Listener 가 forward 안 하므로 트래픽 0
 - V1 의 옛 Target Group `workout-tracker-tg` 는 ALB 와 연결 끊긴 채로 남음 — 만약 V2 에서 문제 발생 시 ALB Listener forward 를 옛 TG 로 되돌려 즉시 롤백 가능 (수동 안전망)
 
-### 12.8 비용
-
-| 리소스 | V1 운영 (24h) | V2 운영 (24h) | V2 정지 (desired-count=0) |
-|---|---|---|---|
-| 컴퓨팅 | EC2 t3.small ~$19/월 | Fargate 0.5 vCPU × 1GB × 2 task ≈ $30/월 | $0 |
-| ALB | $16/월 | $16/월 (동일) | $16/월 (별도 삭제 필요) |
-| RDS / S3 / ECR | 동일 | 동일 | 동일 |
-
-V2 가 Fargate 단가로 인해 운영 중일 때 약 $10/월 더 비싸지만, desired-count = 0 으로 빠르게 정지 가능 + EC2 운영 부담 없음.
-
 ---
 
 ## 부록. 자주 쓰는 명령어 모음
