@@ -5,7 +5,7 @@
 
 ---
 
-## 0. 요약 (TL;DR)
+## 0. 요약
 
 - 도메인: 운동 세션/세트 기록 + 인증샷 업로드 (간단한 1인 사용 도메인)
 - 아키텍처: Browser -> Vercel(Next.js, BFF) -> EC2(Spring Boot in Docker) -> RDS(PostgreSQL), 이미지는 S3 presigned URL
@@ -939,12 +939,18 @@ cors:
 7. "React Query를 왜 도입?"
    - 서버 상태(목록/상세)는 캐시/재요청 일관성 처리가 필요. useState로 직접 관리하면 stale 데이터 / 중복 fetch / 로딩 상태 분기가 폭증. 본 MVP 는 invalidateQueries 기반 자동 refetch 만 적용 (optimistic update 는 미적용 — UX 체감 차이가 크지 않은 단순 폼이라 후속 과제로 둠).
 
-### 8.3 학습으로 얻은 것 (요약)
+### 8.3 직접 다뤄본 운영 경험
 
-- 풀스택 자력 구축 경험: 인프라(RDS/S3/EC2)부터 FE/BE까지 직접 운영 배포
-- AWS 실전: IAM Role, presigned URL, SG 분리, Blue/Green Rolling 배포 직접 구현
-- 신기술 빠른 학습: Playwright, Next.js App Router (Next.js 16 신문법 포함) 를 단기간에 운영 가능 수준으로 익힘
-- 트레이드오프 의식: 오버엔지니어링 회피, 단순함과 정합성의 균형
+- **풀스택 운영 배포**: 인프라(RDS / S3 / EC2 / ECS Fargate)부터 FE / BE 까지 직접 셋업 + 라이브 운영
+- **AWS 운영 실전**:
+  - IAM Role 3종 분리 + OIDC 기반 GitHub Actions 인증
+  - S3 presigned URL 워크플로우 (백엔드 우회 업로드)
+  - SG 체인 (alb-sg → web-sg → db-sg, 0.0.0.0/0 최소화)
+  - V1: EC2 + Docker Compose Blue/Green + 직접 짠 Rolling 스크립트
+  - V2: ECS Fargate + ALB ip-target + Rolling Update + SSM Parameter Store
+- **마이그레이션 실전**: V1 → V2 옮기는 중 만난 3가지 함정 (Target type instance/ip 불호환, `logs:CreateLogGroup` 권한 누락, RDS SG 가 새 ECS task SG 차단) 을 진단/해결
+- **신기술 적용**: Playwright E2E (11 시나리오 + GitHub Actions CI), Next.js 16 신문법(`proxy.ts` rename, hydration race 디버깅) 을 운영 수준으로 적용
+- **트레이드오프 의식**: 오버엔지니어링 회피, 단순함과 정합성의 균형 (단일 EC2 시작 → 운영 표준 ECS 로 점진 이전, V1 코드는 보존)
 
 ### 8.4 동작 확인 흐름 (수동 sanity check 용)
 
