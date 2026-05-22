@@ -1,14 +1,18 @@
 # =====================================================
-# workout-tracker → ECS Fargate 자동 배포
+# workout-tracker → ECS Fargate 수동 배포
+#
+# 트리거 방식:
+#   - GitHub Actions UI 에서 "Run workflow" 버튼 클릭으로만 실행 (수동)
+#   - 문서 수정 / 소소한 commit 으로 의도치 않은 배포가 도는 일을 차단
+#   - 회사 GitLab pipeline 의 "deploy 만 manual job" 패턴과 동일
 #
 # 흐름:
-#   1. main 브랜치 push 트리거
-#   2. (선택) E2E workflow 결과 확인 — 통과하지 못한 main 은 배포 X
-#   3. AWS OIDC 로 임시 자격증명 발급 (long-lived AccessKey 미사용)
-#   4. Docker 이미지 빌드 → ECR push (태그: commit SHA + latest)
-#   5. task-definition.json 의 placeholder 치환 → 새 revision 등록
-#   6. ECS Service update → rolling deployment 자동
-#   7. ECS 가 Deployment 안정화 (Steady state) 까지 대기
+#   1. GitHub Actions UI → Actions 탭 → "Deploy ECS" 선택 → "Run workflow" 클릭
+#   2. AWS OIDC 로 임시 자격증명 발급 (long-lived AccessKey 미사용)
+#   3. Docker 이미지 빌드 → ECR push (태그: commit SHA + latest)
+#   4. task-definition.json 의 placeholder 치환 → 새 revision 등록
+#   5. ECS Service update → rolling deployment 자동
+#   6. ECS 가 Deployment 안정화 (Steady state) 까지 대기
 #
 # 필수 GitHub 설정 (Settings → Secrets and variables → Actions):
 #   Variables:
@@ -22,14 +26,12 @@
 # =====================================================
 name: Deploy ECS
 
+# 수동 트리거 전용 — push 시 자동 배포 안 됨
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 # 같은 group 의 진행 중 run 이 있으면 그것을 cancel 하고 새 run 만 진행.
-# 짧은 시간에 여러 commit 이 push 되어도 ECS 에는 마지막 commit 만 배포되어
-# UpdateService 충돌 / queue 적체를 방지한다.
+# 수동 트리거지만 동시 클릭 / 연속 클릭 시 마지막 만 굴러가도록 안전망 유지.
 concurrency:
   group: deploy-ecs-${{ github.ref }}
   cancel-in-progress: true
