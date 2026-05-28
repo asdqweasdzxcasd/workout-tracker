@@ -13,18 +13,16 @@
 
 ---
 
-## 🗄️ 배포 / 운영 이력
+## 🌐 라이브 사이트 (동작 중인 인스턴스)
 
-학습 목적으로 **AWS 에 실제 배포·운영**했다 (V1 EC2 + Docker Compose Blue/Green → V2 ECS Fargate 마이그레이션 포함). 인프라 구성과 배포 자동화는 **코드·문서로 모두 보존**되어 있어 필요 시 재배포 가능하다.
-
-| 항목 | 상태 |
+| 항목 | URL |
 |---|---|
-| Backend (AWS ECS Fargate + ALB + RDS) | **비활성** — 학습 목적 달성 후 비용 효율을 고려해 정리 |
-| Frontend (Vercel) | 정적 페이지는 유지되나 백엔드 연동 기능은 비활성 |
+| **Frontend (Vercel)** | https://workout-tracker-ten-zeta.vercel.app |
+| Backend API | 비공개 (Vercel BFF → AWS ALB 경유로만 접근) |
 
-> 라이브 인스턴스 대신 **인프라 설계·운영·트러블슈팅 과정** 자체를 결과물로 본다. 상세 구성과 V1→V2 마이그레이션 함정 5가지는 [`deploy/DEPLOY.md`](./deploy/DEPLOY.md) 참고.
+> 회원가입은 누구나 가능. AWS 비용 절감 위해 비활성화될 수 있다.
 
-## 🏗️ 아키텍처 — V2 (ECS Fargate)
+## 🏗️ 운영 아키텍처 — V2 (현재, ECS Fargate)
 
 ```mermaid
 flowchart TB
