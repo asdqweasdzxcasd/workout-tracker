@@ -1043,3 +1043,61 @@ frontend/
 - CloudWatch / Loki 등 중앙 로그 수집
 - Rate limiting (현재 미적용)
 - ECS Service Auto Scaling (CPU/요청 기반 자동 스케일) — V2 마이그레이션으로 ECS Fargate Multi-AZ 까지는 완료, 자동 스케일 정책 적용은 후속
+
+---
+
+## 부록 D. 인증 고도화 로드맵 (재사용 인증 모듈)
+
+> **목표**: `auth/` 를 운동 도메인과 결합 없는 **독립 모듈**로 고도화 → 다음 프로젝트(결제/핀테크 등)에 `auth/` 폴더만 복사 + 환경변수 교체로 재사용.
+>
+> **현재 상태**: Access Token 1개만 / Redis 없음 / 이메일 인증 없음 / 소셜 로그인 없음.
+> 아래는 **미구현 계획(고려용)**. 구현 순서는 D.1 → D.2 → D.3 (자체 인증 토대를 먼저 세운 뒤 OAuth 를 그 위에 얹는다).
+
+### D.1 Access + Refresh 토큰 (Redis)
+
+- Access(짧은 수명 15분~1h) + Refresh(긴 수명 7~14일) 분리
+- Refresh 를 **Redis 에 저장** → stateless JWT 의 한계(로그아웃해도 만료 전 유효)를 보완:
+  - 로그아웃 시 즉시 무효화 (Redis 삭제)
+  - 토큰 회전(rotation): refresh 사용 시 새 refresh 재발급
+  - 다중 기기 세션 관리
+- 흐름: 로그인 → Access+Refresh 발급(Refresh→Redis) → Access 만료(401) → `POST /auth/refresh` → Redis 대조 + rotation → 로그아웃 → Redis 삭제
+- **Redis 위치**: 학습 단계 Upstash(서버리스 무료 티어) / 실무 AWS ElastiCache. ECS task 인메모리 Redis 는 재시작 시 토큰 소실이라 지양.
+
+### D.2 이메일 인증 (자체 가입)
+
+- 가입 시 인증코드(6자리) 또는 인증링크 생성 → **Redis 에 TTL 10분 저장** → **AWS SES** 로 발송
+- 사용자가 코드 입력/링크 클릭 → Redis 대조 → 계정 활성화
+- SES 는 초기 **샌드박스**(검증된 주소로만 발송) → 프로덕션 액세스 요청해야 임의 주소 발송
+- **소셜 로그인 가입자는 이메일 인증 스킵** (구글/네이버가 이미 검증)
+
+### D.3 OAuth 소셜 로그인 (구글 + 네이버)
+
+- **구글**: OIDC(OpenID Connect) 표준, Spring Security `google` provider 기본 지원
+- **네이버**: OAuth2 (OIDC 아님), 커스텀 provider 설정 + user info API 별도 호출
+- **핵심**: 소셜 로그인은 "신원 확인" 단계일 뿐, 성공 후 **우리 서비스 자체 JWT(Access+Refresh)를 발급**해서 이후 API 에 사용. 소셜 provider 토큰을 직접 쓰지 않음.
+- BFF(Vercel) 패턴이라 콜백(redirect) URL 설계 주의 — 백엔드 직접 vs BFF 경유 결정 필요.
+
+### D.4 계정 연동 정책
+
+- `users` 테이블 확장:
+  ```
+  provider        -- LOCAL / GOOGLE / NAVER
+  provider_id     -- 소셜 고유 ID
+  password_hash   -- 소셜 가입자는 NULL 허용
+  email_verified  -- 소셜은 자동 true
+  ```
+- **같은 이메일 = 통합**. 소셜/자체 가입 시도 시 이미 가입된 이메일이면 **"이미 가입된 이메일입니다" 안내 → 기존 로그인 방식으로 유도**.
+- (이메일 탈취 시 계정 통합 악용 우려는 인지 — MVP 정책으로 단순화, 운영 시 계정 연결 확인 단계 추가 검토)
+
+### D.5 재사용 모듈화 원칙
+
+- `auth/` 하위를 `jwt / email / token(Redis) / oauth` 로 분리, 운동 도메인(`session/`)과 의존 없음
+- 다음 프로젝트에 `auth/` + `user/` 만 복사 → provider 설정/환경변수만 교체
+
+### talking point (구현 시 확보)
+
+- stateless JWT 한계를 Redis Refresh 로 보완한 이유
+- 토큰 rotation / 즉시 무효화 설계
+- OIDC(구글) vs 커스텀 OAuth2(네이버) 차이를 직접 구현
+- 계정 통합 정책의 트레이드오프 (이메일 기준 통합 vs 보안)
+- 이메일 인증 플로우 (Redis TTL + SES)
