@@ -2,7 +2,9 @@
 # workout-tracker E2E (Playwright) CI
 #
 # 흐름:
-#   1. PostgreSQL 16 service container 기동 (Flyway 가 마이그레이션 + V2 시드 자동 적용)
+#   1. PostgreSQL 16 + Redis 7 service container 기동
+#      - Postgres: Flyway 마이그레이션 + V2 시드 자동 적용
+#      - Redis: Refresh Token 저장소 (Access+Refresh+Redis 인증 흐름)
 #   2. JDK 17 + Node.js 20 설치 (Gradle / npm 캐시 활용)
 #   3. Spring Boot bootRun 을 백그라운드로 띄우고 /actuator/health 응답 대기
 #   4. Playwright Chromium 설치 후 `npm run test:e2e` 실행
@@ -29,8 +31,11 @@ jobs:
     timeout-minutes: 20
 
     # ----------------------------------------------------
-    # PostgreSQL 16 service container
-    # docker-compose.local.yml 의 설정과 동일하게 맞춤
+    # Service containers (docker-compose.local.yml 과 동일 사양)
+    #   - PostgreSQL 16: Flyway 마이그레이션 + 도메인 데이터
+    #   - Redis 7: Refresh Token 저장소
+    #     없으면 AuthService.login 의 refreshTokenStore.save 가
+    #     6379 Connection refused 로 깨져서 모든 E2E 시나리오가 cascading fail.
     # ----------------------------------------------------
     services:
       postgres:
@@ -48,14 +53,26 @@ jobs:
           --health-timeout 5s
           --health-retries 10
 
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
     # ----------------------------------------------------
     # 백엔드/프론트 공통 환경변수
+    # - JWT_ACCESS_SECRET / JWT_REFRESH_SECRET 은 application-local.yml 의
+    #   기본 더미값(dummy-local-*-secret-...)에 위임 — CI 더미라 굳이 오버라이드 불필요
+    # - REDIS_HOST/PORT 도 application-local.yml 기본값(localhost:6379) 그대로
     # ----------------------------------------------------
     env:
       DB_URL: jdbc:postgresql://localhost:5432/workout_tracker
       DB_USERNAME: workout
       DB_PASSWORD: workout_pw_local
-      JWT_SECRET: ci-dummy-secret-at-least-32-characters-long-for-hs256-algorithm-OK
       SPRING_PROFILES_ACTIVE: local
       # Playwright 가 시스템에서 Chromium 자동 탐지
       CI: "true"
