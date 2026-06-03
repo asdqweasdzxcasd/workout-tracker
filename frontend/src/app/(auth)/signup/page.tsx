@@ -25,7 +25,7 @@ import { FieldError, Input, Label } from "@/components/ui/input";
 import { login, signup } from "@/features/auth/api";
 import { signupSchema, type SignupFormValues } from "@/features/auth/schemas";
 import { extractErrorMessage } from "@/lib/api";
-import { setAccessToken } from "@/lib/auth-storage";
+import { setTokens } from "@/lib/auth-storage";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -48,7 +48,7 @@ export default function SignupPage() {
       return loginResponse;
     },
     onSuccess: (data) => {
-      setAccessToken(data.accessToken);
+      setTokens(data.accessToken, data.refreshToken);
       router.replace("/sessions");
     },
     onError: (error) => {

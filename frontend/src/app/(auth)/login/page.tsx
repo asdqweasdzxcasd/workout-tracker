@@ -28,7 +28,7 @@ import { FieldError, Input, Label } from "@/components/ui/input";
 import { login } from "@/features/auth/api";
 import { loginSchema, type LoginFormValues } from "@/features/auth/schemas";
 import { extractErrorMessage } from "@/lib/api";
-import { setAccessToken } from "@/lib/auth-storage";
+import { setTokens } from "@/lib/auth-storage";
 
 export default function LoginPage() {
   return (
@@ -65,7 +65,7 @@ function LoginForm() {
   const loginMutation = useMutation({
     mutationFn: login,
     onSuccess: (data) => {
-      setAccessToken(data.accessToken);
+      setTokens(data.accessToken, data.refreshToken);
       const next = searchParams.get("next");
       router.replace(next && next.startsWith("/") ? next : "/sessions");
     },

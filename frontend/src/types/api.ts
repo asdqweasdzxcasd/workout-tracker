@@ -46,6 +46,12 @@ export interface LoginResponse {
   accessToken: string;
   tokenType: "Bearer";
   expiresIn: number;
+  refreshToken: string;
+  refreshExpiresIn: number;
+}
+
+export interface RefreshRequest {
+  refreshToken: string;
 }
 
 export interface MeResponse {
