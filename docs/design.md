@@ -1050,18 +1050,50 @@ frontend/
 
 > **목표**: `auth/` 를 운동 도메인과 결합 없는 **독립 모듈**로 고도화 → 다음 프로젝트(결제/핀테크 등)에 `auth/` 폴더만 복사 + 환경변수 교체로 재사용.
 >
-> **현재 상태**: Access Token 1개만 / Redis 없음 / 이메일 인증 없음 / 소셜 로그인 없음.
-> 아래는 **미구현 계획(고려용)**. 구현 순서는 D.1 → D.2 → D.3 (자체 인증 토대를 먼저 세운 뒤 OAuth 를 그 위에 얹는다).
+> **현재 상태**: D.1 **구현 완료** (Access+Refresh+Redis+회전+재사용 탐지+다중 기기). D.2, D.3 은 여전히 미구현 계획.
+> 구현 순서는 D.1 → D.2 → D.3 (자체 인증 토대를 먼저 세운 뒤 OAuth 를 그 위에 얹는다).
 
-### D.1 Access + Refresh 토큰 (Redis)
+### D.1 Access + Refresh 토큰 (Redis) — ✅ 구현 완료
 
-- Access(짧은 수명 15분~1h) + Refresh(긴 수명 7~14일) 분리
-- Refresh 를 **Redis 에 저장** → stateless JWT 의 한계(로그아웃해도 만료 전 유효)를 보완:
-  - 로그아웃 시 즉시 무효화 (Redis 삭제)
-  - 토큰 회전(rotation): refresh 사용 시 새 refresh 재발급
-  - 다중 기기 세션 관리
-- 흐름: 로그인 → Access+Refresh 발급(Refresh→Redis) → Access 만료(401) → `POST /auth/refresh` → Redis 대조 + rotation → 로그아웃 → Redis 삭제
-- **Redis 위치**: 학습 단계 Upstash(서버리스 무료 티어) / 실무 AWS ElastiCache. ECS task 인메모리 Redis 는 재시작 시 토큰 소실이라 지양.
+**채택한 결정**:
+
+| 항목 | 결정 | 근거 |
+|---|---|---|
+| Redis 호스팅 | **AWS ElastiCache (cache.t4g.micro)** | VPC 내부 native, 진짜 운영 경험 확보. Upstash Serverless 도 비교 검토했고 design.md 에 마이그레이션 경로로 남김 |
+| Access 만료 | **15분** | 탈취 노출 시간 최소화 |
+| Refresh 만료 | **14일** | 일주일 출장 후 재로그인 불필요 |
+| 시크릿 | **분리** (`JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET`) | 방어 심층화, 독립 롤링 가능 |
+| Refresh 회전 | **사용 시 새 토큰 발급 + 옛 토큰 즉시 삭제** | OAuth2 RFC 6819 token theft mitigation |
+| 재사용 탐지 | **옛 refresh 재사용 시 그 사용자 모든 세션 무효화** | 도난 방어 |
+| Redis 키 구조 | `rt:{userId}` (SET) + `rt:meta:{jti}` (TTL) | 다중 기기 + O(1) 조회 |
+
+**흐름**:
+- 로그인 → Access + Refresh(new jti) 발급 → `rt:{userId}` SET 에 jti 추가
+- 401 → `POST /auth/refresh` { refreshToken } → Redis 대조 → **rotation** (옛 jti 제거 + 새 토큰 발급/저장)
+- 옛 refresh 가 store 에 없는데 시그니처는 유효 → **재사용 의심** → `deleteAllByUser(userId)` + `REFRESH_TOKEN_REUSED` 응답
+- 로그아웃(`/auth/logout`) → 해당 jti 만 제거 / 토큰 미제공 시 전체 무효화
+- 전체 기기 로그아웃(`/auth/logout-all`) → 사용자의 모든 jti 제거
+
+**구현 위치**:
+- `auth/jwt/JwtTokenProvider` — 두 SecretKey 분리 (`generateAccessToken` / `generateRefreshToken(userId, jti)` / `parseAccessClaims` / `parseRefreshClaims`)
+- `auth/token/RefreshTokenStore` (인터페이스) + `RedisRefreshTokenStore` (Redis 구현)
+- `auth/AuthService` — `login` / `refresh(rotation+reuse 탐지)` / `logout` / `logoutAll`
+- `auth/AuthController` — `POST /auth/refresh` (public), `/auth/logout` / `/auth/logout-all` (Bearer 필요)
+- 인프라: `docker-compose.local.yml` 에 `redis:7-alpine` (AOF), 라이브는 ElastiCache + SSM `/workout-tracker/{JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, REDIS_HOST, REDIS_PORT}`
+
+**테스트**:
+- `JwtTokenProviderTest` — round-trip, 시크릿 분리(access ↔ refresh parser 교차 시 SignatureException), 만료, 짧은 시크릿 거부
+- `AuthServiceTest` — 14 케이스 (login/refresh rotation/reuse 탐지/expired/forged/logout single/logout-all/subject 불일치)
+- `AuthRedisIntegrationTest` — Testcontainers `redis:7-alpine` 에서 6 시나리오 (관찰 가능한 행동 검증)
+
+**프론트엔드**:
+- `lib/auth-storage` — `getRefreshToken / setTokens / clearTokens`
+- `lib/api` — 401 인터셉터를 **단일 refresh promise + 대기 큐** 로 확장 (동시 401 다발 시 `/auth/refresh` 1번만 호출). `REFRESH_TOKEN_REUSED` / `REFRESH_TOKEN_EXPIRED` 응답 시 즉시 logout redirect
+- `features/auth/api` — `logout()` / `logoutAll()` 추가 (서버 호출 후 로컬 토큰 정리)
+
+**한계 / 향후 (Phase 2)**:
+- Reuse 탐지 시 access 는 만료(15분)까지 살아남음 — access blacklist 까지 가면 stateless JWT 의 의미 상실, trade-off 로 수용
+- Upstash 로 비용 절감 마이그레이션 경로: `application-prod.yml` 의 `spring.data.redis.url` 한 줄 변경 + SSM `REDIS_URL` 추가
 
 ### D.2 이메일 인증 (자체 가입)
 

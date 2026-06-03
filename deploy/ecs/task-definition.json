@@ -29,10 +29,13 @@
         { "name": "AWS_S3_BUCKET", "value": "__S3_BUCKET__" }
       ],
       "secrets": [
-        { "name": "DB_URL",      "valueFrom": "arn:aws:ssm:__AWS_REGION__:__ACCOUNT_ID__:parameter/workout-tracker/DB_URL" },
-        { "name": "DB_USERNAME", "valueFrom": "arn:aws:ssm:__AWS_REGION__:__ACCOUNT_ID__:parameter/workout-tracker/DB_USERNAME" },
-        { "name": "DB_PASSWORD", "valueFrom": "arn:aws:ssm:__AWS_REGION__:__ACCOUNT_ID__:parameter/workout-tracker/DB_PASSWORD" },
-        { "name": "JWT_SECRET",  "valueFrom": "arn:aws:ssm:__AWS_REGION__:__ACCOUNT_ID__:parameter/workout-tracker/JWT_SECRET" }
+        { "name": "DB_URL",             "valueFrom": "arn:aws:ssm:__AWS_REGION__:__ACCOUNT_ID__:parameter/workout-tracker/DB_URL" },
+        { "name": "DB_USERNAME",        "valueFrom": "arn:aws:ssm:__AWS_REGION__:__ACCOUNT_ID__:parameter/workout-tracker/DB_USERNAME" },
+        { "name": "DB_PASSWORD",        "valueFrom": "arn:aws:ssm:__AWS_REGION__:__ACCOUNT_ID__:parameter/workout-tracker/DB_PASSWORD" },
+        { "name": "JWT_ACCESS_SECRET",  "valueFrom": "arn:aws:ssm:__AWS_REGION__:__ACCOUNT_ID__:parameter/workout-tracker/JWT_ACCESS_SECRET" },
+        { "name": "JWT_REFRESH_SECRET", "valueFrom": "arn:aws:ssm:__AWS_REGION__:__ACCOUNT_ID__:parameter/workout-tracker/JWT_REFRESH_SECRET" },
+        { "name": "REDIS_HOST",         "valueFrom": "arn:aws:ssm:__AWS_REGION__:__ACCOUNT_ID__:parameter/workout-tracker/REDIS_HOST" },
+        { "name": "REDIS_PORT",         "valueFrom": "arn:aws:ssm:__AWS_REGION__:__ACCOUNT_ID__:parameter/workout-tracker/REDIS_PORT" }
       ],
       "healthCheck": {
         "command": [
