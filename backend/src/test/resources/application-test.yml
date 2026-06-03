@@ -27,9 +27,23 @@ spring:
         format_sql: true
     show-sql: true
 
+  # Refresh Token 저장소 placeholder.
+  # Redis 를 쓰는 통합 테스트(AuthRedisIntegrationTest)는 Testcontainers 가
+  # @DynamicPropertySource 로 host/port 를 override 한다. Lettuce 는 lazy connection
+  # 이라 Redis 를 안 쓰는 다른 @SpringBootTest 들은 부팅에 영향 없음.
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      timeout: 1s
+
 jwt:
-  secret: dummy-test-secret-at-least-32-characters-long-for-hs256-algorithm-OK
-  expires-in-seconds: 3600
+  access:
+    secret: dummy-test-access-secret-at-least-32-characters-long-for-hs256-algorithm-OK
+    expires-in-seconds: 900
+  refresh:
+    secret: dummy-test-refresh-secret-at-least-32-characters-long-for-hs256-algorithm-OK
+    expires-in-seconds: 1209600
 
 # 통합 테스트에서 S3 빈은 실제 호출되지 않지만 빈 생성에는 region/bucket 이 필요.
 # DefaultCredentialsProvider 는 실 자격증명이 없어도 빈 생성 자체는 성공한다.

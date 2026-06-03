@@ -15,10 +15,13 @@ import java.util.Date;
 /**
  * JWT 토큰 발급/검증 컴포넌트.
  *
+ * <p>Access / Refresh 토큰의 시크릿을 <b>분리</b> 보관해 방어 심층화(defense-in-depth).
+ * 둘 중 하나가 유출되어도 다른 한 쪽은 살아있고, 시크릿을 독립적으로 롤링할 수 있다.</p>
+ *
  * <ul>
  *   <li>알고리즘: HS256</li>
- *   <li>시크릿: 환경변수 {@code JWT_SECRET} (32바이트 이상)</li>
- *   <li>Access Token 만료: {@code jwt.expires-in-seconds} (기본 3600초)</li>
+ *   <li>Access: 짧은 만료 (기본 900초 = 15분). subject=userId, claim=email</li>
+ *   <li>Refresh: 긴 만료 (기본 1209600초 = 14일). subject=userId, jti=회전 식별자</li>
  * </ul>
  */
 @Slf4j
@@ -27,40 +30,74 @@ public class JwtTokenProvider {
 
     private static final String CLAIM_EMAIL = "email";
 
-    private final SecretKey secretKey;
-    private final long expiresInSeconds;
+    private final SecretKey accessSecretKey;
+    private final long accessExpiresInSeconds;
+    private final SecretKey refreshSecretKey;
+    private final long refreshExpiresInSeconds;
 
     public JwtTokenProvider(
-            @Value("${jwt.secret}") String secret,
-            @Value("${jwt.expires-in-seconds:3600}") long expiresInSeconds
+            @Value("${jwt.access.secret}") String accessSecret,
+            @Value("${jwt.access.expires-in-seconds:900}") long accessExpiresInSeconds,
+            @Value("${jwt.refresh.secret}") String refreshSecret,
+            @Value("${jwt.refresh.expires-in-seconds:1209600}") long refreshExpiresInSeconds
     ) {
-        byte[] secretBytes = secret.getBytes(StandardCharsets.UTF_8);
-        if (secretBytes.length < 32) {
-            throw new IllegalStateException(
-                    "JWT secret 은 최소 32바이트 이상이어야 합니다. 현재 길이=" + secretBytes.length);
-        }
-        this.secretKey = Keys.hmacShaKeyFor(secretBytes);
-        this.expiresInSeconds = expiresInSeconds;
+        this.accessSecretKey = buildKey(accessSecret, "jwt.access.secret");
+        this.accessExpiresInSeconds = accessExpiresInSeconds;
+        this.refreshSecretKey = buildKey(refreshSecret, "jwt.refresh.secret");
+        this.refreshExpiresInSeconds = refreshExpiresInSeconds;
     }
 
-    /** 사용자 ID(subject) + 이메일 클레임으로 Access Token 생성. */
-    public String generateToken(Long userId, String email) {
-        Date now = new Date();
-        Date expiry = new Date(now.getTime() + expiresInSeconds * 1000L);
+    private static SecretKey buildKey(String secret, String name) {
+        byte[] bytes = secret.getBytes(StandardCharsets.UTF_8);
+        if (bytes.length < 32) {
+            throw new IllegalStateException(
+                    name + " 은 최소 32바이트 이상이어야 합니다. 현재 길이=" + bytes.length);
+        }
+        return Keys.hmacShaKeyFor(bytes);
+    }
 
+    /** Access Token 생성 (subject=userId, claim=email). */
+    public String generateAccessToken(Long userId, String email) {
+        Date now = new Date();
+        Date expiry = new Date(now.getTime() + accessExpiresInSeconds * 1000L);
         return Jwts.builder()
                 .subject(String.valueOf(userId))
                 .claim(CLAIM_EMAIL, email)
                 .issuedAt(now)
                 .expiration(expiry)
-                .signWith(secretKey)
+                .signWith(accessSecretKey)
                 .compact();
     }
 
-    /** 토큰을 검증하고 클레임을 반환한다. 검증 실패 시 jjwt 의 RuntimeException 이 그대로 던져진다. */
-    public Claims parseClaims(String token) {
+    /**
+     * Refresh Token 생성. subject=userId, jti=회전 식별자.
+     * email 등 부가 클레임은 보관하지 않는다 (Refresh 는 신원 확인용이 아니라 회전/검증용).
+     */
+    public String generateRefreshToken(Long userId, String jti) {
+        Date now = new Date();
+        Date expiry = new Date(now.getTime() + refreshExpiresInSeconds * 1000L);
+        return Jwts.builder()
+                .subject(String.valueOf(userId))
+                .id(jti)
+                .issuedAt(now)
+                .expiration(expiry)
+                .signWith(refreshSecretKey)
+                .compact();
+    }
+
+    /** Access Token 검증 + 클레임 추출. 실패 시 jjwt 의 RuntimeException 이 그대로 던져진다. */
+    public Claims parseAccessClaims(String token) {
         Jws<Claims> jws = Jwts.parser()
-                .verifyWith(secretKey)
+                .verifyWith(accessSecretKey)
+                .build()
+                .parseSignedClaims(token);
+        return jws.getPayload();
+    }
+
+    /** Refresh Token 검증 + 클레임 추출. 실패 시 jjwt 의 RuntimeException 이 그대로 던져진다. */
+    public Claims parseRefreshClaims(String token) {
+        Jws<Claims> jws = Jwts.parser()
+                .verifyWith(refreshSecretKey)
                 .build()
                 .parseSignedClaims(token);
         return jws.getPayload();
@@ -71,13 +108,18 @@ public class JwtTokenProvider {
         return Long.parseLong(claims.getSubject());
     }
 
-    /** email 클레임 추출. */
+    /** email 클레임 추출 (Access Token 전용). */
     public String extractEmail(Claims claims) {
         return claims.get(CLAIM_EMAIL, String.class);
     }
 
-    /** 토큰 만료 시간(초) 외부 노출. */
-    public long getExpiresInSeconds() {
-        return expiresInSeconds;
+    /** Access Token 만료 시간(초). */
+    public long getAccessExpiresInSeconds() {
+        return accessExpiresInSeconds;
+    }
+
+    /** Refresh Token 만료 시간(초). */
+    public long getRefreshExpiresInSeconds() {
+        return refreshExpiresInSeconds;
     }
 }

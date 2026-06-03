@@ -17,14 +17,26 @@ spring:
   jpa:
     show-sql: true
 
+  # Refresh Token 저장소 (docker-compose.local.yml 의 redis 컨테이너)
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 3s
+
 # =====================================================
-# JWT 설정
-# - 시크릿은 환경변수 JWT_SECRET 우선, 미지정 시 로컬 더미 사용
-# - 운영(Phase 6)에서는 반드시 EC2 환경변수로 주입
+# JWT 설정 (Access / Refresh 시크릿 분리)
+# - 둘 중 하나가 유출돼도 다른 한 쪽은 살아있도록 시크릿 분리 (방어 심층화)
+# - 시크릿은 환경변수 우선, 미지정 시 로컬 더미 사용
+# - 운영에서는 반드시 SSM Parameter Store SecureString 으로 주입
 # =====================================================
 jwt:
-  secret: ${JWT_SECRET:dummy-local-secret-at-least-32-characters-long-for-hs256-algorithm-OK}
-  expires-in-seconds: 3600
+  access:
+    secret: ${JWT_ACCESS_SECRET:dummy-local-access-secret-at-least-32-characters-long-OK}
+    expires-in-seconds: ${JWT_ACCESS_EXPIRES_IN:900}      # 15분
+  refresh:
+    secret: ${JWT_REFRESH_SECRET:dummy-local-refresh-secret-at-least-32-characters-long-OK}
+    expires-in-seconds: ${JWT_REFRESH_EXPIRES_IN:1209600} # 14일
 
 logging:
   level:

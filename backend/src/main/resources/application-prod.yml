@@ -26,12 +26,33 @@ spring:
   flyway:
     enabled: true
 
+  # Refresh Token 저장소 (ElastiCache Valkey — VPC 내부, AUTH 토큰 없음, 전송 중 TLS)
+  # ssl.enabled=true → ElastiCache 의 "전송 중 암호화" 와 일치 (TLS handshake)
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+      ssl:
+        enabled: true
+      timeout: 3s
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 4
+          min-idle: 0
+
 # =====================================================
-# JWT (운영 시크릿은 반드시 .env / Secrets Manager 로 주입)
+# JWT (Access / Refresh 시크릿 분리)
+# - 두 시크릿 모두 SSM Parameter Store SecureString 으로 주입
+# - 누락 시 부팅 실패 (기본값 미지정)
 # =====================================================
 jwt:
-  secret: ${JWT_SECRET}
-  expires-in-seconds: ${JWT_EXPIRES_IN:3600}
+  access:
+    secret: ${JWT_ACCESS_SECRET}
+    expires-in-seconds: ${JWT_ACCESS_EXPIRES_IN:900}      # 15분
+  refresh:
+    secret: ${JWT_REFRESH_SECRET}
+    expires-in-seconds: ${JWT_REFRESH_EXPIRES_IN:1209600} # 14일
 
 # =====================================================
 # AWS S3 (인증샷)

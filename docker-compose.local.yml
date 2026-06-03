@@ -42,6 +42,25 @@ services:
       postgres:
         condition: service_healthy
 
+  # Refresh Token 세션 저장소 (다중 기기 + rotation + 즉시 무효화)
+  # AOF 활성으로 재시작 시 데이터 보존 (로컬 개발 편의)
+  redis:
+    image: redis:7-alpine
+    container_name: workout-tracker-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--save", "60", "1", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - workout_tracker_redis_data:/data
+
 volumes:
   workout_tracker_db_data:
     name: workout_tracker_db_data
+  workout_tracker_redis_data:
+    name: workout_tracker_redis_data

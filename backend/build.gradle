@@ -27,6 +27,8 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
+    // Refresh Token 세션 저장소 (Lettuce 클라이언트 자동 포함)
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
     // Actuator - /actuator/health 엔드포인트로 Docker healthcheck / ALB target group 헬스체크
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
 
@@ -63,6 +65,9 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     // H2 in-memory DB (통합 테스트용, PostgreSQL 호환 모드)
     testRuntimeOnly 'com.h2database:h2'
+    // Testcontainers — Redis 통합 테스트 (Embedded Redis 는 deprecated, 실제 Redis 컨테이너로 검증)
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    testImplementation 'org.testcontainers:junit-jupiter'
 }
 
 tasks.named('test') {

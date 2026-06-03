@@ -1,1 +1,6 @@
+plugins {
+    // Java 17 toolchain 자동 다운로드 (로컬에 JDK 17 없어도 Gradle 이 받아옴)
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '0.8.0'
+}
+
 rootProject.name = 'workout-tracker-backend'
