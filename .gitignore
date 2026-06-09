@@ -88,3 +88,6 @@ docker-data/
 # OpenAPI / 빌드 산출물
 # =====================================================
 **/HELP.md
+
+# Claude Code 로컬 설정 (대화 기록/세션은 절대 commit X)
+.claude/
