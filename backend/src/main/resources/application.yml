@@ -61,6 +61,13 @@ aws:
     presign-upload-expires-sec: ${AWS_S3_PRESIGN_UPLOAD_EXPIRES_SEC:300}
     # GET presigned URL 유효 시간 (초) - 갤러리 로딩 후 짧은 시간만 유효
     presign-download-expires-sec: ${AWS_S3_PRESIGN_DOWNLOAD_EXPIRES_SEC:900}
+  # SES (이메일 인증 코드 발송, D.2)
+  # - SES 는 운영(prod) 프로필에서만 실제 발송. 로컬/테스트는 LogEmailSender 로 로그 출력.
+  # - region 미지정 시 위 aws.region 사용. 운영은 SSM 으로 SES_REGION / SES_FROM_ADDRESS 주입.
+  ses:
+    region: ${SES_REGION:${AWS_REGION:ap-northeast-2}}
+    # 로컬 placeholder. 운영(prod)은 환경변수 SES_FROM_ADDRESS 로 검증된 발신주소 주입.
+    from-address: ${SES_FROM_ADDRESS:no-reply@example.com}
 
 logging:
   level:

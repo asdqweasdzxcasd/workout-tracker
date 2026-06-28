@@ -6,6 +6,9 @@ import com.workouttracker.auth.dto.MeResponse;
 import com.workouttracker.auth.dto.RefreshRequest;
 import com.workouttracker.auth.dto.SignupRequest;
 import com.workouttracker.auth.dto.SignupResponse;
+import com.workouttracker.auth.email.EmailVerificationService;
+import com.workouttracker.auth.email.dto.ResendVerificationRequest;
+import com.workouttracker.auth.email.dto.VerifyEmailRequest;
 import com.workouttracker.common.error.ErrorResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -33,6 +36,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController {
 
     private final AuthService authService;
+    private final EmailVerificationService emailVerificationService;
 
     @Operation(summary = "회원가입", description = "이메일/비밀번호/닉네임으로 신규 사용자 등록")
     @ApiResponses({
@@ -48,6 +52,40 @@ public class AuthController {
     public ResponseEntity<SignupResponse> signup(@Valid @RequestBody SignupRequest request) {
         SignupResponse response = authService.signup(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @Operation(summary = "이메일 인증 코드 검증",
+            description = "발송된 6자리 코드를 검증하고 성공 시 이메일 인증을 완료한다. " +
+                    "이미 인증된 이메일은 멱등하게 200 을 반환한다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "인증 완료(또는 이미 인증됨)"),
+            @ApiResponse(responseCode = "400", description = "코드 형식 오류 또는 코드 불일치",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "410", description = "코드 만료",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "429", description = "코드 입력 시도 횟수 초과",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @SecurityRequirements // 공개
+    @PostMapping("/verify-email")
+    public ResponseEntity<Void> verifyEmail(@Valid @RequestBody VerifyEmailRequest request) {
+        emailVerificationService.verify(request.email(), request.code());
+        return ResponseEntity.ok().build();
+    }
+
+    @Operation(summary = "이메일 인증 코드 재발송",
+            description = "인증 코드를 재발송한다. 이메일 열거 방어를 위해 미가입/이미인증 이메일에도 " +
+                    "동일하게 202 를 반환하며, 실제 발송은 조건부로만 수행한다.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "202", description = "요청 접수(실제 발송 여부는 비공개)"),
+            @ApiResponse(responseCode = "429", description = "재발송 레이트리밋 초과",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @SecurityRequirements // 공개
+    @PostMapping("/verify-email/resend")
+    public ResponseEntity<Void> resendVerification(@Valid @RequestBody ResendVerificationRequest request) {
+        emailVerificationService.resend(request.email());
+        return ResponseEntity.accepted().build();
     }
 
     @Operation(summary = "로그인",

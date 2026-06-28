@@ -39,6 +39,9 @@ public class User {
     @Column(name = "nickname", nullable = false, length = 50)
     private String nickname;
 
+    @Column(name = "email_verified", nullable = false)
+    private boolean emailVerified;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
 
@@ -62,5 +65,10 @@ public class User {
     @PreUpdate
     void onUpdate() {
         this.updatedAt = OffsetDateTime.now();
+    }
+
+    /** 이메일 인증 완료 처리 (도메인 메서드 — setter 미노출). */
+    public void markEmailVerified() {
+        this.emailVerified = true;
     }
 }

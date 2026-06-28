@@ -58,6 +58,8 @@ dependencies {
     // - 자격증명은 DefaultCredentialsProvider 가 EC2 IAM Role / 환경변수 자동 탐색
     implementation platform('software.amazon.awssdk:bom:2.28.0')
     implementation 'software.amazon.awssdk:s3'
+    // SES v2 - 이메일 인증 코드 발송 (BOM 으로 버전 통일, 운영 프로필에서만 사용)
+    implementation 'software.amazon.awssdk:sesv2'
 
     // Test
     testImplementation 'org.springframework.boot:spring-boot-starter-test'

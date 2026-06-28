@@ -66,6 +66,13 @@ aws:
     bucket: ${AWS_S3_BUCKET}
     presign-upload-expires-sec: ${AWS_S3_PRESIGN_UPLOAD_EXPIRES_SEC:300}
     presign-download-expires-sec: ${AWS_S3_PRESIGN_DOWNLOAD_EXPIRES_SEC:900}
+  # SES (이메일 인증 코드 발송, D.2)
+  # - region/from-address 는 SSM Parameter Store 로 주입 (/workout-tracker/SES_REGION, SES_FROM_ADDRESS)
+  # - from-address 는 기본값 미지정 → 누락 시 부팅 실패 (운영 안전망)
+  # - 자격증명은 EC2 IAM Role (SesConfig 의 DefaultCredentialsProvider)
+  ses:
+    region: ${SES_REGION:${AWS_REGION:ap-northeast-2}}
+    from-address: ${SES_FROM_ADDRESS}
 
 # =====================================================
 # CORS (BFF 경유라 운영에서 실질 미사용, 안전망 + 로컬 dev -> 운영 직접호출용)
