@@ -1,0 +1,72 @@
+# =====================================================
+# workout-tracker 백엔드 JUnit 테스트 (단위 + 통합) CI
+#
+# 목적:
+#   기존 e2e.yml 은 Playwright E2E 만 돌려서 `./gradlew test`(JUnit)가
+#   CI 에서 빠져 있었다. 단위(17) + 통합(10) 테스트를 매 push/PR 마다 검증한다.
+#
+# 통합 테스트의 인프라 충족 방식 (확인 결과):
+#   - DB: H2 in-memory (test 프로필, application-test.yml). 외부 Postgres 불필요.
+#   - Redis: Testcontainers 가 redis:7-alpine 컨테이너를 테스트 실행 중 자체 기동하고
+#            @DynamicPropertySource 로 host/port 를 주입한다 (AuthRedisIntegrationTest 등).
+#     → ubuntu-latest 러너에 기본 설치된 Docker 만 있으면 됨.
+#       별도 service container / 환경변수(JWT secret 등은 application-test.yml 더미값) 불필요.
+#
+# 트리거:
+#   - 모든 브랜치 push
+#   - 모든 PR
+#   - 수동 실행 (workflow_dispatch)
+# =====================================================
+name: Backend Test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: JUnit (단위 + 통합)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # --------------------------------------------------
+      # JDK 17 + Gradle 캐시 (e2e.yml 과 동일 스타일)
+      # 주의: 로컬은 비ASCII 경로 회피용 `-g C:/gradle-home` 가 필요하지만,
+      #       CI(Linux)는 경로 문제가 없으므로 `-g` 옵션을 넣지 않는다.
+      # --------------------------------------------------
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+
+      # --------------------------------------------------
+      # 전체 테스트 실행 (단위 + 통합)
+      # Testcontainers 가 Docker 로 redis:7-alpine 을 자체 기동한다.
+      # --------------------------------------------------
+      - name: Run JUnit tests
+        working-directory: backend
+        run: |
+          chmod +x gradlew
+          ./gradlew test --no-daemon
+
+      # --------------------------------------------------
+      # 결과 artifact: 실패해도(always) JUnit 리포트 업로드 → 디버깅
+      # (e2e.yml 의 artifact 업로드 패턴 참고)
+      # --------------------------------------------------
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-report
+          path: |
+            backend/build/reports/tests/test/
+            backend/build/test-results/test/
+          retention-days: 7
+          if-no-files-found: ignore
