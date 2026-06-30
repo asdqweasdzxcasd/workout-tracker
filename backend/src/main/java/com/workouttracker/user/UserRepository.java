@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.OffsetDateTime;
 import java.util.Optional;
 
 /**
@@ -32,7 +33,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
      * @return 갱신된 행 수 (0=이미 인증됨/대상 없음, 1=새로 인증 처리됨)
      */
     @Modifying(clearAutomatically = true)
-    @Query("UPDATE User u SET u.emailVerified = true, u.updatedAt = CURRENT_TIMESTAMP "
+    @Query("UPDATE User u SET u.emailVerified = true, u.updatedAt = :now "
             + "WHERE LOWER(u.email) = LOWER(:email) AND u.emailVerified = false")
-    int activateEmailVerification(@Param("email") String email);
+    int activateEmailVerification(@Param("email") String email, @Param("now") OffsetDateTime now);
 }
