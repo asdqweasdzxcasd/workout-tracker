@@ -27,7 +27,7 @@ import { Button } from "@/components/ui/button";
 import { FieldError, Input, Label } from "@/components/ui/input";
 import { login } from "@/features/auth/api";
 import { loginSchema, type LoginFormValues } from "@/features/auth/schemas";
-import { extractErrorMessage } from "@/lib/api";
+import { extractErrorCode, extractErrorMessage } from "@/lib/api";
 import { setTokens } from "@/lib/auth-storage";
 
 export default function LoginPage() {
@@ -53,13 +53,17 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const [serverError, setServerError] = useState<string | null>(null);
 
+  // verify-email 성공 후 ?verified=1 로 돌아오면 안내 배너 노출. email 이 함께 오면 prefill.
+  const justVerified = searchParams.get("verified") === "1";
+  const emailFromQuery = searchParams.get("email") ?? "";
+
   const {
     register,
     handleSubmit,
     formState: { errors },
   } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { email: "", password: "" },
+    defaultValues: { email: emailFromQuery, password: "" },
   });
 
   const loginMutation = useMutation({
@@ -69,7 +73,13 @@ function LoginForm() {
       const next = searchParams.get("next");
       router.replace(next && next.startsWith("/") ? next : "/sessions");
     },
-    onError: (error) => {
+    onError: (error, variables) => {
+      // 미인증 사용자 → 인증 페이지로. 상태 전환은 code 로만 분기.
+      // variables 는 mutate 에 넘긴 LoginRequest — 제출한 email 을 그대로 전달.
+      if (extractErrorCode(error) === "EMAIL_NOT_VERIFIED") {
+        router.replace(`/verify-email?email=${encodeURIComponent(variables.email)}&from=login`);
+        return;
+      }
       setServerError(extractErrorMessage(error, "로그인에 실패했습니다."));
     },
   });
@@ -81,6 +91,12 @@ function LoginForm() {
 
   return (
     <LoginShell>
+      {justVerified ? (
+        <div className="mb-4 rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">
+          이메일 인증이 완료되었습니다. 비밀번호로 로그인해주세요.
+        </div>
+      ) : null}
+
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
         <div>
           <Label htmlFor="email" required>

@@ -61,7 +61,8 @@ class EmailVerificationServiceTest {
     @BeforeEach
     void setUp() {
         // @Value 로 주입되는 appName 은 생성자 직접 호출로 전달.
-        service = new EmailVerificationService(userRepository, store, emailSender, APP_NAME);
+        // 테스트 전용 코드 기록기는 단위 테스트 범위 밖이므로 Optional.empty() (prod 와 동일하게 no-op).
+        service = new EmailVerificationService(userRepository, store, emailSender, APP_NAME, Optional.empty());
     }
 
     /** 프로덕션과 동일한 SHA-256(16진 소문자) — findCodeHash 스텁용. */

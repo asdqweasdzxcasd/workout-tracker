@@ -48,15 +48,23 @@ public class EmailVerificationService {
     private final EmailSender emailSender;
     private final SecureRandom secureRandom = new SecureRandom();
     private final String appName;
+    /**
+     * E2E 테스트 전용 평문 코드 기록기 — {@code !prod} 에서만 빈이 존재한다.
+     * prod 에는 빈 자체가 없어 {@code Optional.empty()} 로 주입되며, 기록은 no-op 이 된다.
+     * (평문 코드가 prod 어디에도 저장되지 않도록 보장하는 이중 안전장치.)
+     */
+    private final Optional<TestVerificationCodeRecorder> testCodeRecorder;
 
     public EmailVerificationService(UserRepository userRepository,
                                     EmailVerificationStore store,
                                     EmailSender emailSender,
-                                    @Value("${spring.application.name:workout-tracker}") String appName) {
+                                    @Value("${spring.application.name:workout-tracker}") String appName,
+                                    Optional<TestVerificationCodeRecorder> testCodeRecorder) {
         this.userRepository = userRepository;
         this.store = store;
         this.emailSender = emailSender;
         this.appName = appName;
+        this.testCodeRecorder = testCodeRecorder;
     }
 
     /**
@@ -73,6 +81,9 @@ public class EmailVerificationService {
         String normalizedEmail = normalize(email);
         String code = generateCode();
         store.saveCode(normalizedEmail, sha256(code));
+
+        // E2E 전용: !prod 에서만 평문 코드를 임시 기록(prod 엔 빈이 없어 no-op).
+        testCodeRecorder.ifPresent(recorder -> recorder.record(normalizedEmail, code));
 
         String subject = "[%s] 이메일 인증 코드".formatted(appName);
         String body = buildBody(nickname, code);

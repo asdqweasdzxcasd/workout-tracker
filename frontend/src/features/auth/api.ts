@@ -19,8 +19,10 @@ import type {
   LoginRequest,
   LoginResponse,
   MeResponse,
+  ResendVerificationRequest,
   SignupRequest,
   SignupResponse,
+  VerifyEmailRequest,
 } from "@/types/api";
 
 export async function signup(payload: SignupRequest): Promise<SignupResponse> {
@@ -31,6 +33,25 @@ export async function signup(payload: SignupRequest): Promise<SignupResponse> {
 export async function login(payload: LoginRequest): Promise<LoginResponse> {
   const { data } = await api.post<LoginResponse>("/auth/login", payload);
   return data;
+}
+
+/**
+ * 이메일 인증 코드 검증.
+ *
+ * <p>성공 시 본문 없는 200. 실패는 백엔드 ErrorResponse(code/message)로 전달되며
+ * 호출부가 code 로 상태 전환(재발송 강조/비활성)을 분기한다.</p>
+ */
+export async function verifyEmail(payload: VerifyEmailRequest): Promise<void> {
+  await api.post("/auth/verify-email", payload);
+}
+
+/**
+ * 이메일 인증 코드 재발송.
+ *
+ * <p>이메일 열거 방어로 항상 202(본문 없음). 레이트리밋 초과 시에만 429 가 발생한다.</p>
+ */
+export async function resendVerification(payload: ResendVerificationRequest): Promise<void> {
+  await api.post("/auth/verify-email/resend", payload);
 }
 
 export async function fetchMe(): Promise<MeResponse> {

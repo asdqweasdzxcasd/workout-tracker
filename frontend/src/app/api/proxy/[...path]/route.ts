@@ -30,6 +30,21 @@ type RouteContext = {
 /** EC2 백엔드로 동일한 method/headers/body 를 forward 한다. */
 async function proxy(request: NextRequest, context: RouteContext): Promise<Response> {
   const { path } = await context.params;
+
+  // E2E 테스트 지원 경로(/api/proxy/test/**)는 운영에서 절대 forward 하지 않는다(이중 방어).
+  // 백엔드도 prod 에서 이 경로를 노출하지 않지만, BFF 에서 한 번 더 차단해 평문 코드 유출을 막는다.
+  if (path[0] === "test" && process.env.NODE_ENV === "production") {
+    return new Response(
+      JSON.stringify({
+        status: 404,
+        code: "NOT_FOUND",
+        message: "대상 리소스를 찾을 수 없습니다.",
+        path: `/api/proxy/${path.join("/")}`,
+      }),
+      { status: 404, headers: { "content-type": "application/json; charset=utf-8" } },
+    );
+  }
+
   const search = request.nextUrl.search; // "?page=0&size=20" 형태 (없으면 빈 문자열)
   const targetUrl = `${EC2_API_URL}/api/v1/${path.join("/")}${search}`;
 

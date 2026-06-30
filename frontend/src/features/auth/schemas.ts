@@ -18,6 +18,22 @@ export const loginSchema = z.object({
 });
 export type LoginFormValues = z.infer<typeof loginSchema>;
 
+/** 이메일 인증 코드 — 백엔드(VerifyEmailRequest)와 동일하게 6자리 숫자. 앞자리 0 보존. */
+const VERIFICATION_CODE_PATTERN = /^\d{6}$/;
+
+export const verifyEmailSchema = z.object({
+  email: z
+    .string()
+    .min(1, "이메일을 입력하세요.")
+    .email("이메일 형식이 올바르지 않습니다.")
+    .max(255, "이메일은 255자 이내여야 합니다."),
+  code: z
+    .string()
+    .min(1, "인증 코드를 입력하세요.")
+    .regex(VERIFICATION_CODE_PATTERN, "인증 코드는 6자리 숫자여야 합니다."),
+});
+export type VerifyEmailFormValues = z.infer<typeof verifyEmailSchema>;
+
 export const signupSchema = z.object({
   email: z
     .string()

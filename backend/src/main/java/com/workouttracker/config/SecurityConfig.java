@@ -2,6 +2,7 @@ package com.workouttracker.config;
 
 import com.workouttracker.auth.jwt.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.env.Environment;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -29,33 +30,44 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
+    private final Environment environment;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        // E2E 테스트 지원 엔드포인트(/api/v1/test/**)는 prod 가 아닐 때만 공개한다.
+        // prod 에서는 이 경로의 빈(TestSupportController) 자체가 없고, permitAll 도 추가되지 않아
+        // 인증 대상으로만 남는다(평문 코드 노출 0 — 이중 방어).
+        boolean isProd = environment.matchesProfiles("prod");
+
         http
                 .csrf(csrf -> csrf.disable())
                 .formLogin(form -> form.disable())
                 .httpBasic(basic -> basic.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth
-                        // 공개 경로
-                        .requestMatchers(
-                                "/api/v1/auth/signup",
-                                "/api/v1/auth/login",
-                                "/api/v1/auth/refresh",
-                                "/api/v1/auth/verify-email",
-                                "/api/v1/auth/verify-email/resend",
-                                "/swagger-ui.html",
-                                "/swagger-ui/**",
-                                "/v3/api-docs",
-                                "/v3/api-docs/**",
-                                "/api-docs",
-                                "/api-docs/**",
-                                "/actuator/health"
-                        ).permitAll()
+                .authorizeHttpRequests(auth -> {
+                        auth
+                                // 공개 경로
+                                .requestMatchers(
+                                        "/api/v1/auth/signup",
+                                        "/api/v1/auth/login",
+                                        "/api/v1/auth/refresh",
+                                        "/api/v1/auth/verify-email",
+                                        "/api/v1/auth/verify-email/resend",
+                                        "/swagger-ui.html",
+                                        "/swagger-ui/**",
+                                        "/v3/api-docs",
+                                        "/v3/api-docs/**",
+                                        "/api-docs",
+                                        "/api-docs/**",
+                                        "/actuator/health"
+                                ).permitAll();
+                        // 테스트 지원 엔드포인트는 !prod 프로필에서만 공개.
+                        if (!isProd) {
+                                auth.requestMatchers("/api/v1/test/**").permitAll();
+                        }
                         // 그 외 인증 필요
-                        .anyRequest().authenticated()
-                )
+                        auth.anyRequest().authenticated();
+                })
                 .exceptionHandling(eh -> eh.authenticationEntryPoint(jwtAuthenticationEntryPoint))
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
