@@ -19,6 +19,14 @@ public enum ErrorCode {
     REFRESH_TOKEN_EXPIRED(HttpStatus.UNAUTHORIZED, "리프레시 토큰이 만료되었습니다. 다시 로그인해주세요."),
     REFRESH_TOKEN_REUSED(HttpStatus.UNAUTHORIZED,
             "리프레시 토큰 재사용이 감지되어 모든 세션이 종료되었습니다. 다시 로그인해주세요."),
+    // 이메일 인증 관련 (D.2)
+    EMAIL_NOT_VERIFIED(HttpStatus.FORBIDDEN, "이메일 인증이 필요합니다. 메일함을 확인해주세요."),
+    INVALID_VERIFICATION_CODE(HttpStatus.BAD_REQUEST, "인증 코드가 올바르지 않습니다."),
+    VERIFICATION_CODE_EXPIRED(HttpStatus.GONE, "인증 코드가 만료되었습니다. 다시 요청해주세요."),
+    TOO_MANY_ATTEMPTS(HttpStatus.TOO_MANY_REQUESTS,
+            "인증 시도 횟수를 초과했습니다. 코드를 다시 요청해주세요."),
+    RESEND_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS,
+            "인증 메일 재발송 요청이 너무 잦습니다. 잠시 후 다시 시도해주세요."),
     NOT_FOUND(HttpStatus.NOT_FOUND, "대상 리소스를 찾을 수 없습니다."),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다.");
 

@@ -35,11 +35,24 @@ export interface SignupResponse {
   userId: number;
   email: string;
   nickname: string;
+  /** 가입 직후에는 false. 이메일 인증 완료 시 true. */
+  emailVerified: boolean;
 }
 
 export interface LoginRequest {
   email: string;
   password: string;
+}
+
+/** 이메일 인증 코드 검증 요청. code 는 6자리 숫자 문자열(앞자리 0 보존). */
+export interface VerifyEmailRequest {
+  email: string;
+  code: string;
+}
+
+/** 이메일 인증 코드 재발송 요청. */
+export interface ResendVerificationRequest {
+  email: string;
 }
 
 export interface LoginResponse {

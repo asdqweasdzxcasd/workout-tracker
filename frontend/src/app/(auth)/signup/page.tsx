@@ -8,8 +8,8 @@
  * <p>흐름:
  * <ol>
  *   <li>react-hook-form + zod 검증</li>
- *   <li>POST /auth/signup 성공 시 동일 폼 값으로 POST /auth/login 자동 호출</li>
- *   <li>accessToken 저장 후 /sessions 이동</li>
+ *   <li>POST /auth/signup 성공 시 자동 로그인하지 않는다(D.2 이메일 인증 필수)</li>
+ *   <li>가입 직후 /verify-email?email=... 로 이동 — 코드 입력 후 인증</li>
  *   <li>409 EMAIL_DUPLICATED 등 백엔드 메시지 그대로 노출</li>
  * </ol>
  */
@@ -22,10 +22,9 @@ import { useForm } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
 import { FieldError, Input, Label } from "@/components/ui/input";
-import { login, signup } from "@/features/auth/api";
+import { signup } from "@/features/auth/api";
 import { signupSchema, type SignupFormValues } from "@/features/auth/schemas";
 import { extractErrorMessage } from "@/lib/api";
-import { setTokens } from "@/lib/auth-storage";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -43,13 +42,11 @@ export default function SignupPage() {
   const signupMutation = useMutation({
     mutationFn: async (values: SignupFormValues) => {
       await signup(values);
-      // 회원가입 직후 동일 자격증명으로 로그인 - 사용자 경험 단축
-      const loginResponse = await login({ email: values.email, password: values.password });
-      return loginResponse;
+      // 가입 후 자동 로그인하지 않는다 — 이메일 인증을 먼저 거쳐야 로그인 가능(D.2).
+      return values.email;
     },
-    onSuccess: (data) => {
-      setTokens(data.accessToken, data.refreshToken);
-      router.replace("/sessions");
+    onSuccess: (email) => {
+      router.replace(`/verify-email?email=${encodeURIComponent(email)}`);
     },
     onError: (error) => {
       setServerError(extractErrorMessage(error, "회원가입에 실패했습니다."));

@@ -5,6 +5,7 @@ import com.workouttracker.auth.dto.LoginResponse;
 import com.workouttracker.auth.dto.MeResponse;
 import com.workouttracker.auth.dto.SignupRequest;
 import com.workouttracker.auth.dto.SignupResponse;
+import com.workouttracker.auth.email.UserSignedUpEvent;
 import com.workouttracker.auth.jwt.JwtTokenProvider;
 import com.workouttracker.auth.token.RefreshTokenStore;
 import com.workouttracker.common.error.BusinessException;
@@ -16,6 +17,7 @@ import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -43,6 +45,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final RefreshTokenStore refreshTokenStore;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public SignupResponse signup(SignupRequest request) {
@@ -59,7 +62,13 @@ public class AuthService {
 
         User saved = userRepository.save(user);
         log.info("회원가입 완료: userId={} email={}", saved.getId(), saved.getEmail());
-        return new SignupResponse(saved.getId(), saved.getEmail(), saved.getNickname());
+
+        // 인증 코드 생성/저장/발송은 커밋 이후(AFTER_COMMIT) 비동기 처리 → 발송 실패가 가입을
+        // 롤백시키지 않는다(설계 7번). 이벤트는 트랜잭션 내에서 발행해야 커밋 후 리스너가 동작.
+        eventPublisher.publishEvent(new UserSignedUpEvent(saved.getEmail(), saved.getNickname()));
+
+        return new SignupResponse(saved.getId(), saved.getEmail(), saved.getNickname(),
+                saved.isEmailVerified());
     }
 
     @Transactional(readOnly = true)
@@ -69,6 +78,11 @@ public class AuthService {
 
         if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
+        }
+
+        // 미인증 로그인 차단 (설계 5번). 이 검사는 여기 한 곳에만 — 운동 도메인은 verified 를 모른다.
+        if (!user.isEmailVerified()) {
+            throw new BusinessException(ErrorCode.EMAIL_NOT_VERIFIED);
         }
 
         return issueTokens(user);

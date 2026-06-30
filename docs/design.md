@@ -1095,12 +1095,27 @@ frontend/
 - Reuse 탐지 시 access 는 만료(15분)까지 살아남음 — access blacklist 까지 가면 stateless JWT 의 의미 상실, trade-off 로 수용
 - Upstash 로 비용 절감 마이그레이션 경로: `application-prod.yml` 의 `spring.data.redis.url` 한 줄 변경 + SSM `REDIS_URL` 추가
 
-### D.2 이메일 인증 (자체 가입)
+### D.2 이메일 인증 (자체 가입) — ✅ 백엔드 구현 완료 (프론트/SES 인프라 잔여)
 
-- 가입 시 인증코드(6자리) 또는 인증링크 생성 → **Redis 에 TTL 10분 저장** → **AWS SES** 로 발송
-- 사용자가 코드 입력/링크 클릭 → Redis 대조 → 계정 활성화
-- SES 는 초기 **샌드박스**(검증된 주소로만 발송) → 프로덕션 액세스 요청해야 임의 주소 발송
-- **소셜 로그인 가입자는 이메일 인증 스킵** (구글/네이버가 이미 검증)
+**채택한 결정**:
+
+| 항목 | 결정 | 근거 |
+|---|---|---|
+| 인증 방식 | **6자리 숫자 코드** (링크 X) | BFF(Vercel) 콜백 URL 불필요, 메일 프리페치 자동소비 보안 이슈 회피 |
+| 코드 저장 | Redis `ev:code:{email}`, **SHA-256 해시**, TTL 10분 | Redis 탈취 시 평문 코드 노출 방지, 상수시간 비교 |
+| 발송 | `EmailSender` 인터페이스 + `LogEmailSender`(`!prod`) / `SesEmailSender`(`prod`, AWS SDK v2 sesv2) | 로컬은 로그 출력으로 테스트, 운영만 SES. provider 교체 가능 |
+| 발송 시점 | 가입 트랜잭션 **커밋 후** `@TransactionalEventListener(AFTER_COMMIT)` + `@Async` | 발송 실패가 가입을 롤백 안 함, 외부 I/O가 트랜잭션 미점유 |
+| 활성화 | `UPDATE users SET email_verified=true WHERE email=? AND email_verified=false` | 멱등·원자적 |
+| 미인증 로그인 | **차단** (`login()` 에서 403 `EMAIL_NOT_VERIFIED`, 한 곳에만) | 운동 도메인이 verified 를 모르게 (모듈 격리) |
+| 이메일 열거 방어 | verify/resend 가 미가입·이미인증에도 **동일 202**, 발송만 조건부 | account enumeration 차단 |
+| 레이트리밋 | 재발송 **60초 쿨다운**(SET NX EX) + **시간당 5회 상한**(INCR+EXPIRE) + 코드입력 **5회 실패 시 폐기** | 스팸·SES 비용·brute-force 방어 |
+| 이메일 정규화 | 진입점에서 `trim().toLowerCase()` 통일 (DB LOWER 매칭과 Redis 키 일치) | 대소문자 우회/인증실패 방지 |
+
+**구현 위치**: `auth/email/` (EmailSender·EmailVerificationService·EmailVerificationStore/RedisEmailVerificationStore·UserSignedUpEvent·EmailVerificationEventListener·dto), `auth/AuthController`(verify-email, verify-email/resend), `user/User`(email_verified), Flyway `V3`, `config/SesConfig`.
+
+**테스트**: 단위 17 통과(verify/resend/정규화/코드형식·해싱). Redis 통합 10(Testcontainers redis:7-alpine)은 **CI 에서 검증**(로컬 Docker 부재).
+
+**잔여**: ① 프론트 화면(가입→코드입력→재발송) ② SES 운영 셋업(도메인 Verified Identity + DKIM/SPF + 샌드박스→프로덕션 + SSM 발신주소). SES 는 인프라 작업이라 코드 영향 없음.
 
 ### D.3 OAuth 소셜 로그인 (구글 + 네이버)
 

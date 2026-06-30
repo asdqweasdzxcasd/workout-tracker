@@ -4,6 +4,7 @@ import com.workouttracker.auth.dto.LoginRequest;
 import com.workouttracker.auth.dto.LoginResponse;
 import com.workouttracker.auth.dto.SignupRequest;
 import com.workouttracker.auth.dto.SignupResponse;
+import com.workouttracker.auth.email.UserSignedUpEvent;
 import com.workouttracker.auth.jwt.JwtTokenProvider;
 import com.workouttracker.auth.token.RefreshTokenStore;
 import com.workouttracker.common.error.BusinessException;
@@ -21,6 +22,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -54,6 +56,9 @@ class AuthServiceTest {
     @Mock
     private RefreshTokenStore refreshTokenStore;
 
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
+
     @InjectMocks
     private AuthService authService;
 
@@ -66,6 +71,7 @@ class AuthServiceTest {
                 .passwordHash("$2a$10$hashedPassword")
                 .nickname("kim")
                 .build();
+        existingUser.markEmailVerified(); // 로그인 성공 테스트: 인증 완료된 사용자 전제
         ReflectionTestUtils.setField(existingUser, "id", 1L);
     }
 
@@ -92,6 +98,7 @@ class AuthServiceTest {
         assertThat(response.nickname()).isEqualTo("neo");
         verify(passwordEncoder, times(1)).encode("Secret1234");
         verify(userRepository, times(1)).save(any(User.class));
+        verify(eventPublisher, times(1)).publishEvent(any(UserSignedUpEvent.class));
     }
 
     @Test
