@@ -35,7 +35,9 @@
         { "name": "JWT_ACCESS_SECRET",  "valueFrom": "arn:aws:ssm:__AWS_REGION__:__ACCOUNT_ID__:parameter/workout-tracker/JWT_ACCESS_SECRET" },
         { "name": "JWT_REFRESH_SECRET", "valueFrom": "arn:aws:ssm:__AWS_REGION__:__ACCOUNT_ID__:parameter/workout-tracker/JWT_REFRESH_SECRET" },
         { "name": "REDIS_HOST",         "valueFrom": "arn:aws:ssm:__AWS_REGION__:__ACCOUNT_ID__:parameter/workout-tracker/REDIS_HOST" },
-        { "name": "REDIS_PORT",         "valueFrom": "arn:aws:ssm:__AWS_REGION__:__ACCOUNT_ID__:parameter/workout-tracker/REDIS_PORT" }
+        { "name": "REDIS_PORT",         "valueFrom": "arn:aws:ssm:__AWS_REGION__:__ACCOUNT_ID__:parameter/workout-tracker/REDIS_PORT" },
+        { "name": "SES_FROM_ADDRESS",   "valueFrom": "arn:aws:ssm:__AWS_REGION__:__ACCOUNT_ID__:parameter/workout-tracker/SES_FROM_ADDRESS" },
+        { "name": "SES_REGION",         "valueFrom": "arn:aws:ssm:__AWS_REGION__:__ACCOUNT_ID__:parameter/workout-tracker/SES_REGION" }
       ],
       "healthCheck": {
         "command": [
