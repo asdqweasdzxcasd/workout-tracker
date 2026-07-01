@@ -6,6 +6,8 @@ import com.workouttracker.auth.dto.SignupRequest;
 import com.workouttracker.auth.dto.SignupResponse;
 import com.workouttracker.common.error.BusinessException;
 import com.workouttracker.common.error.ErrorCode;
+import com.workouttracker.user.User;
+import com.workouttracker.user.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -55,6 +57,9 @@ class AuthRedisIntegrationTest {
     AuthService authService;
 
     @Autowired
+    UserRepository userRepository;
+
+    @Autowired
     StringRedisTemplate redisTemplate;
 
     private static final String PASSWORD = "Secret1234";
@@ -73,6 +78,11 @@ class AuthRedisIntegrationTest {
         email = "u" + System.nanoTime() + "@test.com";
         SignupResponse signup = authService.signup(new SignupRequest(email, PASSWORD, "kim"));
         userId = signup.userId();
+
+        // D.2 미인증 차단 우회: login 테스트가 EMAIL_NOT_VERIFIED 에 막히지 않도록 인증 처리.
+        User u = userRepository.findById(userId).orElseThrow();
+        u.markEmailVerified();
+        userRepository.save(u);
     }
 
     @Test

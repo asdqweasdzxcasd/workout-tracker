@@ -16,6 +16,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.OffsetDateTime;
 import java.util.HexFormat;
 import java.util.Optional;
 
@@ -101,12 +102,12 @@ class EmailVerificationServiceTest {
         void verify_success() {
             when(userRepository.findByEmail(EMAIL)).thenReturn(Optional.of(unverifiedUser(EMAIL, "kim")));
             when(store.findCodeHash(EMAIL)).thenReturn(Optional.of(CODE_HASH));
-            when(userRepository.activateEmailVerification(EMAIL)).thenReturn(1);
+            when(userRepository.activateEmailVerification(eq(EMAIL), any(OffsetDateTime.class))).thenReturn(1);
 
             service.verify(EMAIL, CODE);
 
             verify(store, times(1)).deleteCode(EMAIL);
-            verify(userRepository, times(1)).activateEmailVerification(EMAIL);
+            verify(userRepository, times(1)).activateEmailVerification(eq(EMAIL), any(OffsetDateTime.class));
             verify(store, never()).incrementAttempt(anyString());
         }
 
@@ -123,7 +124,7 @@ class EmailVerificationServiceTest {
                     .isEqualTo(ErrorCode.INVALID_VERIFICATION_CODE);
 
             verify(store, times(1)).incrementAttempt(EMAIL);
-            verify(userRepository, never()).activateEmailVerification(anyString());
+            verify(userRepository, never()).activateEmailVerification(anyString(), any(OffsetDateTime.class));
             verify(store, never()).deleteCode(anyString());
         }
 
@@ -139,7 +140,7 @@ class EmailVerificationServiceTest {
                     .isEqualTo(ErrorCode.VERIFICATION_CODE_EXPIRED);
 
             verify(store, never()).incrementAttempt(anyString());
-            verify(userRepository, never()).activateEmailVerification(anyString());
+            verify(userRepository, never()).activateEmailVerification(anyString(), any(OffsetDateTime.class));
         }
 
         @Test
@@ -155,7 +156,7 @@ class EmailVerificationServiceTest {
                     .isEqualTo(ErrorCode.TOO_MANY_ATTEMPTS);
 
             verify(store, times(1)).deleteCode(EMAIL); // 코드 무효화
-            verify(userRepository, never()).activateEmailVerification(anyString());
+            verify(userRepository, never()).activateEmailVerification(anyString(), any(OffsetDateTime.class));
         }
 
         @Test
@@ -182,7 +183,7 @@ class EmailVerificationServiceTest {
 
             verify(store, never()).findCodeHash(anyString());
             verify(store, never()).deleteCode(anyString());
-            verify(userRepository, never()).activateEmailVerification(anyString());
+            verify(userRepository, never()).activateEmailVerification(anyString(), any(OffsetDateTime.class));
         }
     }
 
@@ -218,11 +219,11 @@ class EmailVerificationServiceTest {
             when(userRepository.findByEmail("kim@example.com"))
                     .thenReturn(Optional.of(unverifiedUser("kim@example.com", "kim")));
             when(store.findCodeHash("kim@example.com")).thenReturn(Optional.of(savedHash.getValue()));
-            when(userRepository.activateEmailVerification("kim@example.com")).thenReturn(1);
+            when(userRepository.activateEmailVerification(eq("kim@example.com"), any(OffsetDateTime.class))).thenReturn(1);
 
             service.verify("kim@example.com", issuedCode);
 
-            verify(userRepository, times(1)).activateEmailVerification("kim@example.com");
+            verify(userRepository, times(1)).activateEmailVerification(eq("kim@example.com"), any(OffsetDateTime.class));
             verify(store, times(1)).deleteCode("kim@example.com");
         }
 
@@ -255,12 +256,12 @@ class EmailVerificationServiceTest {
             when(userRepository.findByEmail("kim@example.com"))
                     .thenReturn(Optional.of(unverifiedUser("kim@example.com", "kim")));
             when(store.findCodeHash("kim@example.com")).thenReturn(Optional.of(CODE_HASH));
-            when(userRepository.activateEmailVerification("kim@example.com")).thenReturn(1);
+            when(userRepository.activateEmailVerification(eq("kim@example.com"), any(OffsetDateTime.class))).thenReturn(1);
 
             service.verify("  Kim@Example.COM  ", CODE);
 
             verify(store, times(1)).findCodeHash("kim@example.com");
-            verify(userRepository, times(1)).activateEmailVerification("kim@example.com");
+            verify(userRepository, times(1)).activateEmailVerification(eq("kim@example.com"), any(OffsetDateTime.class));
         }
     }
 

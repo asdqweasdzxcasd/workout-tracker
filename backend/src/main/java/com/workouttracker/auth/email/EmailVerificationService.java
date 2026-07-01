@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.time.OffsetDateTime;
 import java.util.HexFormat;
 import java.util.Locale;
 import java.util.Optional;
@@ -128,7 +129,7 @@ public class EmailVerificationService {
 
         // 코드 일치 → 일회성 소모 후 조건부 UPDATE(멱등·원자적).
         store.deleteCode(normalizedEmail);
-        int updated = userRepository.activateEmailVerification(normalizedEmail);
+        int updated = userRepository.activateEmailVerification(normalizedEmail, OffsetDateTime.now());
         log.info("이메일 인증 완료: email={} updatedRows={}", normalizedEmail, updated);
         // updated==0 이면 대상 사용자가 없거나 이미 인증된 경우 — 어느 쪽이든 200 멱등 처리.
     }
