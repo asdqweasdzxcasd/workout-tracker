@@ -15,7 +15,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
+import org.springframework.core.task.SyncTaskExecutor;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.scheduling.annotation.AsyncConfigurer;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -26,6 +28,7 @@ import org.testcontainers.utility.DockerImageName;
 
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -60,11 +63,18 @@ class EmailVerificationFlowIntegrationTest {
 
     /** 발송 본문을 메모리에 기록해 인증 코드를 테스트에서 추출하기 위한 녹화 EmailSender. */
     @TestConfiguration
-    static class RecordingEmailSenderConfig {
+    static class RecordingEmailSenderConfig implements AsyncConfigurer {
         @Bean
         @Primary
         RecordingEmailSender recordingEmailSender() {
             return new RecordingEmailSender();
+        }
+
+        // @Async 를 동기 실행으로 강제한다. signup 의 AFTER_COMMIT 비동기 코드 발급이
+        // signup() 반환 전에 끝나므로, 이후 명시적 issueAndSend 와의 발급 레이스가 사라진다.
+        @Override
+        public Executor getAsyncExecutor() {
+            return new SyncTaskExecutor();
         }
     }
 
