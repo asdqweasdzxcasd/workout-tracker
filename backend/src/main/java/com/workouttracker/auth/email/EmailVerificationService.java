@@ -88,8 +88,16 @@ public class EmailVerificationService {
 
         String subject = "[%s] 이메일 인증 코드".formatted(appName);
         String body = buildBody(nickname, code);
-        emailSender.send(normalizedEmail, subject, body);
-        log.info("인증 코드 발송: email={}", normalizedEmail);
+
+        // 발송 실패(SES MessageRejectedException 등)가 흐름을 깨뜨리지 않도록 흡수한다.
+        // signup 은 @Async 리스너가 삼키지만, resend 는 동기 호출이라 여기서 잡지 않으면 500 이 샌다.
+        // 코드는 이미 Redis 에 저장돼 있어 사용자는 재발송으로 복구 가능 → 항상 정상(202) 흐름 유지.
+        try {
+            emailSender.send(normalizedEmail, subject, body);
+            log.info("인증 코드 발송: email={}", normalizedEmail);
+        } catch (RuntimeException e) {
+            log.warn("인증 코드 발송 실패(무시하고 계속): email={} cause={}", normalizedEmail, e.toString());
+        }
     }
 
     /**
