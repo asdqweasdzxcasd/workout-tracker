@@ -21,11 +21,13 @@ import java.util.HexFormat;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -391,6 +393,17 @@ class EmailVerificationServiceTest {
             assertThat(hash.getValue())
                     .as("코드 평문이 아닌 SHA-256 16진 해시여야 함")
                     .matches("^[0-9a-f]{64}$");
+        }
+
+        @Test
+        @DisplayName("발송 실패해도 예외 전파 안 함 - SES 리젝 등 흡수, 코드는 저장됨 (회귀: resend 500 방지)")
+        void sendFailureIsSwallowed() {
+            doThrow(new RuntimeException("MessageRejected: not verified"))
+                    .when(emailSender).send(eq(EMAIL), anyString(), anyString());
+
+            assertThatCode(() -> service.issueAndSend(EMAIL, "kim")).doesNotThrowAnyException();
+
+            verify(store).saveCode(eq(EMAIL), anyString());
         }
 
         /** 본문에서 "인증 코드: 012345" 패턴의 6자리 코드를 추출. */
