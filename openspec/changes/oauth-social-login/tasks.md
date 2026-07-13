@@ -34,16 +34,16 @@
 
 ## 6. 프론트엔드 (Next.js / BFF)
 
-- [ ] 6.1 로그인 화면에 구글·네이버·카카오 버튼 추가, 클릭 시 백엔드 authorize 진입점으로 이동
-- [ ] 6.2 콜백 페이지: exchange code 수신 → BFF 경유 토큰 교환 → D.1 기존 저장 흐름 재사용
-- [ ] 6.3 실패/취소(사용자 동의 거부, state 오류) 시 로그인 화면 에러 처리
+- [x] 6.1 로그인 화면에 구글·네이버·카카오 버튼 추가, 클릭 시 백엔드 authorize 진입점으로 이동(`NEXT_PUBLIC_OAUTH_BASE_URL`, BFF 미경유 직행)
+- [x] 6.2 콜백 페이지(`/oauth/callback`): exchange code 수신 → BFF 경유 토큰 교환 → D.1 기존 저장 흐름 재사용(StrictMode 이중 소비 방지 포함)
+- [x] 6.3 실패/취소(사용자 동의 거부, state 오류) 시 `/login?error=oauth` 배너 처리
 
 ## 7. 테스트
 
 - [x] 7.1 단위: 각 extractor 정규화(구글/네이버/카카오, 카카오 이메일 없음 케이스) — 11케이스 + 이메일 미검증 드롭 케이스
 - [x] 7.2 단위: 프로비저닝 3분기(신규/기존 (provider,provider_id)/이메일 연동) + 트랜잭션 — 5케이스 + 리포지토리 H2 4케이스
 - [x] 7.3 통합: 콜백 state 검증(불일치→실패 리다이렉트/provider error), authorize 302(3사), 미지원 provider 400, exchange→자체 토큰 발급/무효 401/검증 400 — 8케이스(`OAuthFlowIntegrationTest`)
-- [ ] 7.4 E2E(가능 범위): 소셜 버튼 → 콜백 code 교환 → 로그인 완료(provider는 목)
+- [x] 7.4 E2E(가능 범위): 버튼 3종 노출·href, authorize→provider 302(state 포함), 콜백 code 누락/무효 → 실패 배너 — 6케이스(`e2e/oauth.spec.ts`). 실 provider 동의 화면은 배포 후 수동 스모크(8.2)
 
 ## 8. 마무리
 
