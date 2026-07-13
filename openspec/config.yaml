@@ -1,0 +1,45 @@
+schema: spec-driven
+
+context: |
+  workout-tracker — 운동 세션/세트 기록 + 인증샷 업로드 풀스택 개인 프로젝트.
+  기술스택: Spring Boot 3(Java 17) 백엔드, Next.js 16(App Router, BFF=Vercel) 프론트,
+  PostgreSQL(AWS RDS), Redis(ElastiCache), AWS ECS Fargate + ALB, S3.
+  코드는 영어, 주석·커밋메시지는 한국어. 트랜잭션 필요 작업은 트랜잭션으로 감싸고,
+  외부 입력은 검증하며, 시크릿은 하드코딩 금지(SSM Parameter Store 사용).
+
+  기존 인증 (docs/design.md 부록 D):
+  - D.1 완료: Access(15분)+Refresh(14일) JWT + Redis refresh 저장/회전/재사용탐지/다중기기.
+    auth/ 모듈은 운동 도메인(session/)과 의존 없음(재사용 목표). Bearer + localStorage.
+  - D.2 완료: 자체 가입 이메일 인증(6자리 코드, Redis TTL 10분, AWS SES 도메인 DKIM 발송,
+    미인증 로그인 차단, 열거방어, 레이트리밋). auth/email/ 모듈.
+
+  이번 change 대상 = D.3 OAuth 소셜 로그인 (구글 + 네이버 + 카카오):
+  - 구글=OIDC(Spring Security 기본 지원), 네이버·카카오=OAuth2(커스텀 provider + userinfo API 별도).
+    네이버/카카오는 표준 OIDC 아님 → 동일한 "커스텀 OAuth2 provider" 패턴으로 처리(카카오≈네이버).
+  - provider를 확장 가능하게 추상화(설정으로 provider 추가) → 향후 Apple 등도 저비용 추가 목표.
+  - 핵심: 소셜 로그인은 "신원 확인"일 뿐 → 성공 후 우리 서비스 자체 JWT(D.1) 발급.
+    소셜 provider 토큰을 직접 API에 쓰지 않음.
+  - BFF(Vercel) 패턴이라 콜백(redirect) URL 설계 주의(백엔드 직접 vs BFF 경유 결정).
+  - 주의: 카카오는 이메일 제공이 동의항목(선택)이라 이메일이 없을 수 있음 → 계정연동/식별 설계 시 고려.
+  - D.4 계정 연동: 같은 이메일 = 통합. users 테이블에 provider/provider_id 추가,
+    소셜 가입자는 password_hash NULL 허용 + 이메일 인증(D.2) 스킵(구글/네이버/카카오가 이미 검증).
+  - D.5: auth/ 하위를 jwt/email/token/oauth 로 분리해 재사용성 유지.
+
+# Project context (optional)
+# This is shown to AI when creating artifacts.
+# Add your tech stack, conventions, style guides, domain knowledge, etc.
+# Example:
+#   context: |
+#     Tech stack: TypeScript, React, Node.js
+#     We use conventional commits
+#     Domain: e-commerce platform
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always include a "Non-goals" section
+#     tasks:
+#       - Break tasks into chunks of max 2 hours

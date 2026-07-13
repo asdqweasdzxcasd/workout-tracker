@@ -25,7 +25,7 @@ import { useForm } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
 import { FieldError, Input, Label } from "@/components/ui/input";
-import { login } from "@/features/auth/api";
+import { login, oauthAuthorizeUrl, type OAuthProvider } from "@/features/auth/api";
 import { loginSchema, type LoginFormValues } from "@/features/auth/schemas";
 import { extractErrorCode, extractErrorMessage } from "@/lib/api";
 import { setTokens } from "@/lib/auth-storage";
@@ -56,6 +56,8 @@ function LoginForm() {
   // verify-email 성공 후 ?verified=1 로 돌아오면 안내 배너 노출. email 이 함께 오면 prefill.
   const justVerified = searchParams.get("verified") === "1";
   const emailFromQuery = searchParams.get("email") ?? "";
+  // 소셜 로그인 실패(동의 거부, state 오류, code 만료) 시 ?error=oauth 로 돌아온다.
+  const oauthFailed = searchParams.get("error") === "oauth";
 
   const {
     register,
@@ -94,6 +96,12 @@ function LoginForm() {
       {justVerified ? (
         <div className="mb-4 rounded-md bg-green-50 px-3 py-2 text-sm text-green-700">
           이메일 인증이 완료되었습니다. 비밀번호로 로그인해주세요.
+        </div>
+      ) : null}
+
+      {oauthFailed ? (
+        <div role="alert" className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+          소셜 로그인에 실패했습니다. 다시 시도해주세요.
         </div>
       ) : null}
 
@@ -139,6 +147,23 @@ function LoginForm() {
         </Button>
       </form>
 
+      <div className="mt-6">
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-zinc-200" />
+          </div>
+          <div className="relative flex justify-center text-xs">
+            <span className="bg-white px-2 text-zinc-400">또는 소셜 계정으로</span>
+          </div>
+        </div>
+
+        <div className="mt-4 space-y-2">
+          <SocialLoginButton provider="google" label="구글로 계속하기" />
+          <SocialLoginButton provider="naver" label="네이버로 계속하기" />
+          <SocialLoginButton provider="kakao" label="카카오로 계속하기" />
+        </div>
+      </div>
+
       <p className="mt-6 text-center text-sm text-zinc-600">
         아직 계정이 없나요?{" "}
         <Link href="/signup" className="font-medium text-blue-600 hover:underline">
@@ -146,5 +171,23 @@ function LoginForm() {
         </Link>
       </p>
     </LoginShell>
+  );
+}
+
+/** 소셜 로그인 버튼 — 백엔드 authorize 진입점으로 전체 페이지 이동 (BFF 미경유). */
+function SocialLoginButton({ provider, label }: { provider: OAuthProvider; label: string }) {
+  const styles: Record<OAuthProvider, string> = {
+    google: "border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50",
+    naver: "bg-[#03C75A] text-white hover:bg-[#02b351]",
+    kakao: "bg-[#FEE500] text-zinc-900 hover:bg-[#f5dc00]",
+  };
+  return (
+    <a
+      href={oauthAuthorizeUrl(provider)}
+      data-testid={`oauth-${provider}`}
+      className={`flex w-full items-center justify-center rounded-md px-4 py-2.5 text-sm font-medium transition-colors ${styles[provider]}`}
+    >
+      {label}
+    </a>
   );
 }

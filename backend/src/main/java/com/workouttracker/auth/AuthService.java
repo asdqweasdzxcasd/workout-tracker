@@ -164,6 +164,19 @@ public class AuthService {
         log.info("Logout all: userId={}", userId);
     }
 
+    /**
+     * 소셜 로그인(D.3) exchange 성공 후 자체 토큰 발급.
+     *
+     * <p>비밀번호·이메일 인증 검사를 하지 않는다 — 소셜 provider 가 신원을 확인했고
+     * 프로비저닝이 emailVerified 를 보장한다. 로컬 login() 과 달리 userId 로 직접 발급.
+     */
+    @Transactional(readOnly = true)
+    public LoginResponse issueTokensForUser(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
+        return issueTokens(user);
+    }
+
     @Transactional(readOnly = true)
     public MeResponse getMe(Long userId) {
         User user = userRepository.findById(userId)

@@ -27,6 +27,10 @@ public enum ErrorCode {
             "인증 시도 횟수를 초과했습니다. 코드를 다시 요청해주세요."),
     RESEND_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS,
             "인증 메일 재발송 요청이 너무 잦습니다. 잠시 후 다시 시도해주세요."),
+    // OAuth 소셜 로그인 (D.3)
+    UNSUPPORTED_OAUTH_PROVIDER(HttpStatus.BAD_REQUEST, "지원하지 않는 소셜 로그인 제공자입니다."),
+    INVALID_OAUTH_EXCHANGE_CODE(HttpStatus.UNAUTHORIZED,
+            "소셜 로그인 코드가 유효하지 않거나 만료되었습니다. 다시 로그인해주세요."),
     NOT_FOUND(HttpStatus.NOT_FOUND, "대상 리소스를 찾을 수 없습니다."),
     INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다.");
 
