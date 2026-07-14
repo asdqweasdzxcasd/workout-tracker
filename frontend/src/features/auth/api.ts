@@ -59,6 +59,32 @@ export async function fetchMe(): Promise<MeResponse> {
   return data;
 }
 
+// ==================== OAuth 소셜 로그인 (D.3) ====================
+
+export type OAuthProvider = "google" | "naver" | "kakao";
+
+/**
+ * 소셜 로그인 시작 URL.
+ *
+ * <p>authorize 는 전체 페이지 리다이렉트 흐름이라 BFF 프록시를 타지 않고
+ * 브라우저가 백엔드로 직접 이동한다 (provider 콘솔의 redirect_uri 도 백엔드 도메인).
+ * 성공 시 백엔드가 프론트 /oauth/callback?code= 로 되돌려준다.
+ */
+export function oauthAuthorizeUrl(provider: OAuthProvider): string {
+  const base = process.env.NEXT_PUBLIC_OAUTH_BASE_URL ?? "http://localhost:8080";
+  return `${base}/oauth2/authorization/${provider}`;
+}
+
+/**
+ * 소셜 로그인 1회용 code → 자체 Access/Refresh 토큰 교환.
+ *
+ * <p>code 는 60초 유효·1회용. 실패(만료/재사용)는 401 ErrorResponse 로 온다.</p>
+ */
+export async function exchangeOAuthCode(code: string): Promise<LoginResponse> {
+  const { data } = await api.post<LoginResponse>("/auth/oauth/exchange", { code });
+  return data;
+}
+
 /**
  * 로그아웃 — 현재 기기 세션만 무효화.
  *

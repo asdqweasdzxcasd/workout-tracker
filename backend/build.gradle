@@ -25,6 +25,8 @@ dependencies {
     // Spring Boot core
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-security'
+    // OAuth2 소셜 로그인 (D.3) — 구글 OIDC + 네이버/카카오 커스텀 provider
+    implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     // Refresh Token 세션 저장소 (Lettuce 클라이언트 자동 포함)

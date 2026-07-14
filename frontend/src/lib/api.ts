@@ -84,6 +84,12 @@ api.interceptors.response.use(
       return Promise.reject(error);
     }
 
+    // 소셜 로그인 exchange 의 401 = code 만료/재사용 — 세션 만료가 아니다.
+    // refresh 시도/강제 리다이렉트 없이 호출부(/oauth/callback)가 실패 UX 를 처리한다.
+    if (typeof original.url === "string" && original.url.includes("/auth/oauth/exchange")) {
+      return Promise.reject(error);
+    }
+
     // 이미 한 번 재시도한 요청은 더 안 시도 (무한 루프 방지)
     if (original._retry) {
       redirectToLogin();

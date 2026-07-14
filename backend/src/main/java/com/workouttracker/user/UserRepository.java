@@ -20,6 +20,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("SELECT u FROM User u WHERE LOWER(u.email) = LOWER(:email)")
     Optional<User> findByEmail(@Param("email") String email);
 
+    /** 소셜 신원 조회 (provider + provider 내 고유 ID). D.3 OAuth 프로비저닝의 1차 식별. */
+    Optional<User> findByProviderAndProviderId(AuthProvider provider, String providerId);
+
     /** 회원가입 직전 중복 체크용. */
     @Query("SELECT COUNT(u) > 0 FROM User u WHERE LOWER(u.email) = LOWER(:email)")
     boolean existsByEmail(@Param("email") String email);
