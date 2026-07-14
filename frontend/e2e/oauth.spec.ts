@@ -55,13 +55,18 @@ test.describe("OAuth 소셜 로그인", () => {
     await page.goto("/oauth/callback");
 
     await page.waitForURL(/\/login\?error=oauth/);
-    await expect(page.getByRole("alert")).toContainText("소셜 로그인에 실패했습니다");
+    // getByRole("alert") 단독은 Next.js 라우트 어나운서까지 잡혀 strict 위반 → 텍스트로 좁힌다
+    await expect(
+      page.getByRole("alert").filter({ hasText: "소셜 로그인에 실패했습니다" }),
+    ).toBeVisible();
   });
 
   test("무효한 exchange code 는 로그인 화면으로 돌아간다 (1회용/만료)", async ({ page }) => {
     await page.goto("/oauth/callback?code=invalid-or-expired-code");
 
     await page.waitForURL(/\/login\?error=oauth/);
-    await expect(page.getByRole("alert")).toBeVisible();
+    await expect(
+      page.getByRole("alert").filter({ hasText: "소셜 로그인에 실패했습니다" }),
+    ).toBeVisible();
   });
 });
