@@ -91,3 +91,7 @@ docker-data/
 
 # Claude Code 로컬 설정 (대화 기록/세션은 절대 commit X)
 .claude/
+
+# AWS 스택 켜기/끄기 오케스트레이션 시크릿 (Cloudflare 토큰 등) 절대 commit 금지
+deploy/.ops.local
+!deploy/.ops.local.example
