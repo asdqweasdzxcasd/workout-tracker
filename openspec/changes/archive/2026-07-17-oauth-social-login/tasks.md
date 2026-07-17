@@ -9,7 +9,7 @@
 - [x] 2.1 `spring-boot-starter-oauth2-client` 의존성 추가
 - [x] 2.2 구글 `ClientRegistration`(OIDC issuer 자동) 설정
 - [x] 2.3 네이버·카카오 커스텀 `ClientRegistration`(authorization/token/user-info URI, scope) 설정
-- [ ] 2.4 client id/secret/redirect-uri를 SSM Parameter Store에서 주입하도록 설정(하드코딩 금지), ECS task-def 배선 — 환경변수 패턴 완료(`GOOGLE/NAVER/KAKAO_CLIENT_ID/SECRET`), SSM 저장+task-def 배선은 배포 단계(8.2)에서
+- [x] 2.4 client id/secret/redirect-uri를 SSM Parameter Store에서 주입하도록 설정(하드코딩 금지), ECS task-def 배선 — SSM `/workout-tracker/{GOOGLE,NAVER,KAKAO}_CLIENT_{ID,SECRET}` + `OAUTH2_{SUCCESS,FAILURE}_REDIRECT_URI` 8개 저장, task-def secrets 배선 완료(커밋 `b2f135f`)
 - [x] 2.5 공통 `OAuthUserInfo`(provider, providerId, email(Optional), name) 모델 + `OAuthUserInfoExtractor` 인터페이스 정의
 - [x] 2.6 구글/네이버/카카오 각 extractor 구현(카카오 `kakao_account.email` 선택 처리, 네이버 `response` 중첩 처리)
 
@@ -47,6 +47,6 @@
 
 ## 8. 마무리
 
-- [ ] 8.1 각 provider 개발자 콘솔 앱 등록 + redirect_uri(운영 도메인 + localhost) 등록 확인
-- [ ] 8.2 CI 통과 확인(단위+통합) 후 배포, 운영 스모크 테스트(3사 실제 로그인 1회씩)
-- [ ] 8.3 `openspec/config.yaml` 및 `docs/design.md` 부록 D.3 완료 반영, 필요 시 D.4(다중 연동) 후속 메모
+- [x] 8.1 각 provider 개발자 콘솔 앱 등록 + redirect_uri(운영 도메인 + localhost) 등록 확인 — 3사 완료. 함정: 네이버 서비스 URL=프론트 도메인(disp_stat=208)·검수 전 멤버 등록, 카카오 로그인 리다이렉트 URI + 닉네임 동의항목(KOE006/KOE205)
+- [x] 8.2 CI 통과 확인(단위+통합) 후 배포, 운영 스모크 테스트(3사 실제 로그인 1회씩) — ECS task-def rev:17 배포, 구글·네이버·카카오 실제 로그인 성공
+- [x] 8.3 `openspec/config.yaml` 및 `docs/design.md` 부록 D.3 완료 반영, 필요 시 D.4(다중 연동) 후속 메모 — design.md D.3 완료 갱신, D.4 후속(다중 provider 연동 = user_oauth_link 테이블, 카카오 비즈앱 이메일)

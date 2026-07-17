@@ -37,9 +37,9 @@ flowchart TB
     subgraph AWS["☁️ AWS ap-northeast-2"]
         ALB["Application Load Balancer<br/>workout-tracker-alb<br/>(Target Group: ip 타입)"]
 
-        subgraph ECS["ECS Cluster (Fargate)"]
+        subgraph ECS["ECS Cluster (Fargate · Auto Scaling 1~4)"]
             Task1["📦 Task #1<br/>Spring Boot<br/>0.5 vCPU / 1GB"]
-            Task2["📦 Task #2<br/>Spring Boot<br/>0.5 vCPU / 1GB"]
+            Task2["📦 Task #2…N<br/>Spring Boot<br/>CPU 60% / ALB req 200 기준<br/>자동 확장 (max 4)"]
         end
 
         RDS[("🗄️ RDS<br/>PostgreSQL 16")]
@@ -51,7 +51,7 @@ flowchart TB
             GHA["GithubDeployRole<br/>(OIDC)<br/>ECR push + ECS UpdateService"]
         end
 
-        SSM[("🔐 SSM Parameter Store<br/>DB_URL / DB_PASSWORD<br/>JWT_SECRET (SecureString)")]
+        SSM[("🔐 SSM Parameter Store<br/>DB_URL / DB_PASSWORD / JWT_SECRET<br/>REDIS_HOST / SES / OAuth 3사<br/>(SecureString)")]
     end
 
     User -->|HTTPS| Pages
@@ -321,8 +321,10 @@ workout-tracker/
 | 6 | AWS 배포 V1 (EC2/RDS/S3 + ALB Blue/Green + Vercel) | ✅ |
 | 7 | E2E (Playwright 11 시나리오) + GitHub Actions CI + 문서화 | ✅ |
 | 8 | **V1 → V2 마이그레이션** (ECS Fargate + ECR + SSM Parameter Store + 3 IAM Role + OIDC + GitHub Actions 자동 배포) | ✅ |
+| 9 | **인증 고도화** (D.1 Access+Refresh JWT + Redis 회전/재사용탐지 · D.2 이메일 인증 6자리코드 + SES · D.3 OAuth 소셜로그인 **구글·네이버·카카오** 3사) | ✅ |
+| 10 | **ECS 오토스케일링 + 부하 테스트** (Application Auto Scaling — CPU 60% + ALB 요청수/타겟 200 다중 정책 · k6 부하 **18만 요청 무중단**, 1→4 스케일아웃 실측) | ✅ |
 
-세부 내용은 [`docs/design.md`](./docs/design.md) 6장 참고. 배포 절차 / V1→V2 마이그레이션 함정 5가지는 [`deploy/DEPLOY.md`](./deploy/DEPLOY.md).
+세부 내용은 [`docs/design.md`](./docs/design.md) 6장 참고. 인증 고도화 로드맵은 [`docs/design.md`](./docs/design.md) 부록 D. 배포 절차 / V1→V2 마이그레이션 함정 5가지는 [`deploy/DEPLOY.md`](./deploy/DEPLOY.md). 오토스케일링 구성·부하 테스트 결과는 [`deploy/AUTOSCALING.md`](./deploy/AUTOSCALING.md).
 
 ---
 

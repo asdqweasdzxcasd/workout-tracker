@@ -1050,7 +1050,7 @@ frontend/
 
 > **목표**: `auth/` 를 운동 도메인과 결합 없는 **독립 모듈**로 고도화 → 다음 프로젝트(결제/핀테크 등)에 `auth/` 폴더만 복사 + 환경변수 교체로 재사용.
 >
-> **현재 상태**: D.1 **구현 완료** (Access+Refresh+Redis+회전+재사용 탐지+다중 기기). D.2, D.3 은 여전히 미구현 계획.
+> **현재 상태**: D.1 · D.2 · D.3 **모두 구현 완료** (자체 JWT 인증 → 이메일 인증 → OAuth 소셜 로그인). 2026-07 운영 배포 + 3사 실제 로그인 스모크 통과. D.4(다중 provider 연동)는 후속 과제.
 > 구현 순서는 D.1 → D.2 → D.3 (자체 인증 토대를 먼저 세운 뒤 OAuth 를 그 위에 얹는다).
 
 ### D.1 Access + Refresh 토큰 (Redis) — ✅ 구현 완료
@@ -1117,18 +1117,30 @@ frontend/
 
 **잔여**: ① 프론트 화면(가입→코드입력→재발송) ② SES 운영 셋업(도메인 Verified Identity + DKIM/SPF + 샌드박스→프로덕션 + SSM 발신주소). SES 는 인프라 작업이라 코드 영향 없음.
 
-### D.3 OAuth 소셜 로그인 (구글 + 네이버)
+### D.3 OAuth 소셜 로그인 (구글 · 네이버 · 카카오) — ✅ 구현 완료
 
-- **구글**: OIDC(OpenID Connect) 표준, Spring Security `google` provider 기본 지원
-- **네이버**: OAuth2 (OIDC 아님), 커스텀 provider 설정 + user info API 별도 호출
-- **핵심**: 소셜 로그인은 "신원 확인" 단계일 뿐, 성공 후 **우리 서비스 자체 JWT(Access+Refresh)를 발급**해서 이후 API 에 사용. 소셜 provider 토큰을 직접 쓰지 않음.
-- BFF(Vercel) 패턴이라 콜백(redirect) URL 설계 주의 — 백엔드 직접 vs BFF 경유 결정 필요.
+**채택한 결정**:
+
+| 항목 | 결정 | 근거 |
+|---|---|---|
+| provider | 구글=**OIDC**(Spring 기본), 네이버·카카오=**커스텀 OAuth2**(authorization/token/userinfo URI 직접 설정 + provider별 extractor) | 네이버·카카오는 표준 OIDC 아님 → 동일 "커스텀 OAuth2" 패턴으로 통일(카카오≈네이버) |
+| 소셜의 역할 | **신원 확인만** → 성공 후 우리 서비스 **자체 JWT(D.1) 발급**. provider 토큰 미저장 | 소셜은 로그인 수단, 세션은 우리가 관리 |
+| state | **Redis 저장**(SecureRandom, TTL) | STATELESS·다중 태스크(ECS 2개)에서 CSRF 방어 |
+| 프론트 전달 | 성공 시 **1회용 exchange code(60초)** 만 리다이렉트 → `POST /api/v1/auth/oauth/exchange` 로 토큰 교환 | URL·로그에 JWT 노출 방지 (BFF/Vercel 패턴 대응) |
+| DB(V4) | `provider`/`provider_id` 추가, `password_hash`·`email` **NULL 허용**, `UNIQUE(provider, provider_id)` | 소셜 가입자는 비밀번호 없음, 카카오는 이메일 선택동의(없을 수 있음) |
+| 카카오 이메일 | **미수집**(비즈앱 필요 → 스킵, 닉네임만) → 이메일 없는 유저 케이스 코드 처리 | MVP 범위 |
+
+**구현 위치**: `auth/oauth/` (`OAuthUserInfo`·`OAuthUserInfoExtractor` + `Google/Naver/KakaoUserInfoExtractor`·`OAuthUserProvisioningService`·성공/실패 핸들러·exchange), Flyway `V4`, `application.yml` `security.oauth2.client`. 시크릿은 SSM `/workout-tracker/{GOOGLE,NAVER,KAKAO}_CLIENT_{ID,SECRET}` + `OAUTH2_{SUCCESS,FAILURE}_REDIRECT_URI`.
+
+**테스트**: extractor 단위 11 + 프로비저닝 5(+리포지토리 4) + 통합 8(`OAuthFlowIntegrationTest`) + E2E 6(`e2e/oauth.spec.ts`).
+
+**운영 스모크(2026-07)**: 구글·네이버·카카오 **3사 실제 로그인 성공**. 콘솔 설정 함정 기록 — 네이버는 **서비스 URL을 프론트(Vercel) 도메인**으로 설정해야(disp_stat=208 회피) + 검수 전이면 멤버 등록 필요, 카카오는 **로그인 리다이렉트 URI 등록 + 닉네임(profile_nickname) 동의항목 ON** 필요(KOE006/KOE205).
 
 ### D.4 계정 연동 정책
 
 - `users` 테이블 확장:
   ```
-  provider        -- LOCAL / GOOGLE / NAVER
+  provider        -- LOCAL / GOOGLE / NAVER / KAKAO
   provider_id     -- 소셜 고유 ID
   password_hash   -- 소셜 가입자는 NULL 허용
   email_verified  -- 소셜은 자동 true
