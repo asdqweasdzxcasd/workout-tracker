@@ -37,7 +37,15 @@
         { "name": "REDIS_HOST",         "valueFrom": "arn:aws:ssm:__AWS_REGION__:__ACCOUNT_ID__:parameter/workout-tracker/REDIS_HOST" },
         { "name": "REDIS_PORT",         "valueFrom": "arn:aws:ssm:__AWS_REGION__:__ACCOUNT_ID__:parameter/workout-tracker/REDIS_PORT" },
         { "name": "SES_FROM_ADDRESS",   "valueFrom": "arn:aws:ssm:__AWS_REGION__:__ACCOUNT_ID__:parameter/workout-tracker/SES_FROM_ADDRESS" },
-        { "name": "SES_REGION",         "valueFrom": "arn:aws:ssm:__AWS_REGION__:__ACCOUNT_ID__:parameter/workout-tracker/SES_REGION" }
+        { "name": "SES_REGION",         "valueFrom": "arn:aws:ssm:__AWS_REGION__:__ACCOUNT_ID__:parameter/workout-tracker/SES_REGION" },
+        { "name": "GOOGLE_CLIENT_ID",           "valueFrom": "arn:aws:ssm:__AWS_REGION__:__ACCOUNT_ID__:parameter/workout-tracker/GOOGLE_CLIENT_ID" },
+        { "name": "GOOGLE_CLIENT_SECRET",       "valueFrom": "arn:aws:ssm:__AWS_REGION__:__ACCOUNT_ID__:parameter/workout-tracker/GOOGLE_CLIENT_SECRET" },
+        { "name": "NAVER_CLIENT_ID",            "valueFrom": "arn:aws:ssm:__AWS_REGION__:__ACCOUNT_ID__:parameter/workout-tracker/NAVER_CLIENT_ID" },
+        { "name": "NAVER_CLIENT_SECRET",        "valueFrom": "arn:aws:ssm:__AWS_REGION__:__ACCOUNT_ID__:parameter/workout-tracker/NAVER_CLIENT_SECRET" },
+        { "name": "KAKAO_CLIENT_ID",            "valueFrom": "arn:aws:ssm:__AWS_REGION__:__ACCOUNT_ID__:parameter/workout-tracker/KAKAO_CLIENT_ID" },
+        { "name": "KAKAO_CLIENT_SECRET",        "valueFrom": "arn:aws:ssm:__AWS_REGION__:__ACCOUNT_ID__:parameter/workout-tracker/KAKAO_CLIENT_SECRET" },
+        { "name": "OAUTH2_SUCCESS_REDIRECT_URI", "valueFrom": "arn:aws:ssm:__AWS_REGION__:__ACCOUNT_ID__:parameter/workout-tracker/OAUTH2_SUCCESS_REDIRECT_URI" },
+        { "name": "OAUTH2_FAILURE_REDIRECT_URI", "valueFrom": "arn:aws:ssm:__AWS_REGION__:__ACCOUNT_ID__:parameter/workout-tracker/OAUTH2_FAILURE_REDIRECT_URI" }
       ],
       "healthCheck": {
         "command": [
